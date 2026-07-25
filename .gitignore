@@ -53,3 +53,7 @@ redisdata/
 
 # Alembic
 backend/alembic/versions/*.pyc
+
+# 外部知识源（克隆的上游仓库）与提取产物
+data/external/
+data/processed/

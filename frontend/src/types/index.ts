@@ -17,6 +17,13 @@ export interface KnowledgePoint {
   difficulty: Difficulty
   parent_id: string | null
   order: number
+  // 聚合统计（后端 list/get 接口返回）
+  lecture_count?: number
+  template_count?: number
+  children_count?: number
+  // Codeforces 关联
+  cf_tag?: string | null
+  cf_problem_count?: number
 }
 
 export interface Problem {
@@ -53,6 +60,14 @@ export interface Lecture {
   level: 'card' | 'standard' | 'deep'
   title: string
   content: string
+}
+
+export interface CodeTemplate {
+  id: string
+  knowledge_id: string
+  language: string
+  template_code: string
+  explanation: string | null
 }
 
 export interface Submission {

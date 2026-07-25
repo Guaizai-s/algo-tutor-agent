@@ -41,6 +41,9 @@ class KnowledgePoint(UUIDMixin, TimestampMixin, Base):
         nullable=True,
     )
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Codeforces 关联（CF tag 合并到知识点时填）
+    cf_tag: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    cf_problem_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     parent: Mapped["KnowledgePoint | None"] = relationship(
         "KnowledgePoint", remote_side="KnowledgePoint.id", back_populates="children"

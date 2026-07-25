@@ -23,7 +23,7 @@ const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const navItems = [
-    { path: '/knowledge', label: '知识点图谱', icon: BookOpen },
+    { path: '/knowledge', label: '算法路线图', icon: BookOpen },
     { path: '/problems', label: '题库', icon: Code2 },
     { path: '/ai-chat', label: 'AI 问答', icon: MessageSquare },
     { path: '/progress', label: '学习进度', icon: BarChart3 },

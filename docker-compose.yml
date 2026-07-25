@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-algo_tutor_secret}
       POSTGRES_DB: ${POSTGRES_DB:-algo_tutor}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -37,6 +37,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./data:/data   # 外部知识源与提取产物（灌库脚本读取）
       - /var/run/docker.sock:/var/run/docker.sock   # 后端 spawn 兄弟沙箱容器
     env_file:
       - .env
@@ -49,12 +50,11 @@ services:
   frontend:
     build: ./frontend
     container_name: algo-frontend
-    command: npm run dev -- --host 0.0.0.0
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     depends_on:
       - backend
 

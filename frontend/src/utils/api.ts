@@ -41,6 +41,8 @@ export const knowledgeApi = {
   getTree: () => api.get('/knowledge/'),
   getById: (id: string) => api.get(`/knowledge/${id}`),
   getLectures: (id: string) => api.get(`/knowledge/${id}/lectures`),
+  getTemplates: (id: string) => api.get(`/knowledge/${id}/templates`),
+  getPrerequisites: (id: string) => api.get(`/knowledge/${id}/prerequisites`),
 }
 
 export const problemsApi = {

@@ -3,36 +3,196 @@ import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
   BookOpen,
+  Code2,
+  Copy,
   FileText,
   GraduationCap,
-  Copy,
   Loader2,
   AlertCircle,
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github-dark.css'
 import { knowledgeApi } from '../utils/api'
-import type { KnowledgePoint, Lecture } from '../types'
+import type { CodeTemplate, KnowledgePoint, Lecture } from '../types'
+
+// OI-wiki / mkdocs-material admonition 类型 → emoji + 标题映射
+// 用于把 `??? note "标题"` / `???+ warning` 之类语法转成 blockquote
+const ADMONITION_META: Record<string, { emoji: string; defaultTitle: string }> = {
+  note: { emoji: '📝', defaultTitle: '笔记' },
+  info: { emoji: 'ℹ️', defaultTitle: '信息' },
+  tip: { emoji: '💡', defaultTitle: '提示' },
+  success: { emoji: '✅', defaultTitle: '成功' },
+  warning: { emoji: '⚠️', defaultTitle: '警告' },
+  failure: { emoji: '❌', defaultTitle: '失败' },
+  danger: { emoji: '🔥', defaultTitle: '危险' },
+  bug: { emoji: '🐛', defaultTitle: 'Bug' },
+  example: { emoji: '🧪', defaultTitle: '示例' },
+  question: { emoji: '❓', defaultTitle: '问题' },
+  abstract: { emoji: '📋', defaultTitle: '摘要' },
+  quote: { emoji: '💬', defaultTitle: '引用' },
+}
+
+// 把 mkdocs admonition 语法转成标准 markdown blockquote
+// 输入形如：
+//   ???+ warning "注意"
+//       作为项目方针的一部分...
+//       多行内容...
+//   ## 下一个标题
+// 输出：
+//   > ⚠️ **注意**
+//   >
+//   > 作为项目方针的一部分...
+//   > 多行内容...
+//   ## 下一个标题
+function preprocessAdmonition(md: string): string {
+  // 匹配：??? / ???+ 后跟类型名，可选 "标题"，然后是 4 空格缩进的块体
+  // 直到遇到非缩进行或文档结束
+  const lines = md.split('\n')
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const m = line.match(/^\?\?\?([+-]?)\s+(\w+)(?:\s+"([^"]*)")?\s*$/)
+    if (!m) {
+      out.push(line)
+      i++
+      continue
+    }
+    const type = m[2].toLowerCase()
+    const title = m[3] || ADMONITION_META[type]?.defaultTitle || type
+    const meta = ADMONITION_META[type] || { emoji: '📌' }
+    // 收集缩进体（4 空格或 tab）
+    const body: string[] = []
+    i++
+    while (i < lines.length) {
+      const l = lines[i]
+      if (l.startsWith('    ') || l.startsWith('\t')) {
+        body.push(l.replace(/^( {4}|\t)/, ''))
+        i++
+      } else if (l.trim() === '') {
+        // 空行允许，但如果是连续空行且后面无缩进，结束块
+        // 简单处理：检查下一行是否仍缩进
+        const next = lines[i + 1]
+        if (next && (next.startsWith('    ') || next.startsWith('\t'))) {
+          body.push('')
+          i++
+        } else {
+          break
+        }
+      } else {
+        break
+      }
+    }
+    // 输出为 blockquote
+    out.push(`> ${meta.emoji} **${title}**`)
+    out.push('>')
+    body.forEach((b) => out.push(b ? `> ${b}` : '>'))
+    out.push('') // 块后空行
+  }
+  return out.join('\n')
+}
+
+// 把 mkdocs content tabs 语法转成带语言标签的代码块平铺
+// 输入形如：
+//   === "C++"
+//       ```cpp
+//       int main() { return 0; }
+//       ```
+//
+//   === "Python"
+//       ```python
+//       print("hello")
+//       ```
+// 输出（每个 tab 用加粗语言标签分隔，代码块直接平铺）：
+//   **C++**
+//
+//   ```cpp
+//   int main() { return 0; }
+//   ```
+//
+//   **Python**
+//
+//   ```python
+//   print("hello")
+//   ```
+// 不用 <details> 是因为 react-markdown 默认不渲染原生 HTML（需额外引入 rehype-raw）；
+// 多语言并列平铺对学习场景也更友好，便于对比
+function preprocessTabs(md: string): string {
+  const lines = md.split('\n')
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    // 匹配 `=== "标题"` 或 `=== '标题'`
+    const m = line.match(/^===\s+["']([^"']+)["']\s*$/)
+    if (!m) {
+      out.push(line)
+      i++
+      continue
+    }
+    const title = m[1]
+    // 收集缩进体
+    const body: string[] = []
+    i++
+    while (i < lines.length) {
+      const l = lines[i]
+      if (l.startsWith('    ') || l.startsWith('\t')) {
+        body.push(l.replace(/^( {4}|\t)/, ''))
+        i++
+      } else if (l.trim() === '') {
+        // 空行：若下一行仍是缩进或下一个 ===，归到当前 tab
+        const next = lines[i + 1]
+        if (
+          next &&
+          (next.startsWith('    ') || next.startsWith('\t') || /^===\s+["']/.test(next))
+        ) {
+          body.push('')
+          i++
+        } else break
+      } else break
+    }
+    // 输出加粗语言标签 + 内容
+    out.push(`**${title}**`)
+    out.push('')
+    body.forEach((b) => out.push(b))
+    out.push('')
+  }
+  return out.join('\n')
+}
 
 const KnowledgeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const [knowledge, setKnowledge] = useState<KnowledgePoint | null>(null)
   const [lectures, setLectures] = useState<Lecture[]>([])
+  const [templates, setTemplates] = useState<CodeTemplate[]>([])
+  const [prerequisites, setPrerequisites] = useState<KnowledgePoint[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeLevel, setActiveLevel] = useState<'card' | 'standard' | 'deep'>('card')
-  const [copied, setCopied] = useState(false)
+  const [copiedTpl, setCopiedTpl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([knowledgeApi.getById(id), knowledgeApi.getLectures(id)])
-      .then(([kpResp, lecResp]) => {
+    Promise.all([
+      knowledgeApi.getById(id),
+      knowledgeApi.getLectures(id),
+      knowledgeApi.getTemplates(id),
+      knowledgeApi.getPrerequisites(id),
+    ])
+      .then(([kpResp, lecResp, tplResp, preResp]) => {
         if (cancelled) return
         setKnowledge(kpResp.data as KnowledgePoint)
         const lecs = lecResp.data as Lecture[]
         setLectures(lecs)
-        // 优先选中第一个可用级别
+        setTemplates(tplResp.data as CodeTemplate[])
+        setPrerequisites(preResp.data as KnowledgePoint[])
         if (lecs.length > 0) {
           setActiveLevel(lecs[0].level)
         }
@@ -60,11 +220,11 @@ const KnowledgeDetail: React.FC = () => {
 
   const currentLecture = lectures.find((l) => l.level === activeLevel)
 
-  const handleCopy = async (text: string) => {
+  const handleCopy = async (text: string, tplId: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      setCopiedTpl(tplId)
+      setTimeout(() => setCopiedTpl(null), 1500)
     } catch {
       // ignore clipboard failures
     }
@@ -85,7 +245,7 @@ const KnowledgeDetail: React.FC = () => {
         <AlertCircle size={40} className="text-red-500" />
         <p className="text-gray-700">{error || '知识点不存在'}</p>
         <Link to="/knowledge" className="text-blue-600 hover:underline">
-          返回知识点图谱
+          返回算法路线图
         </Link>
       </div>
     )
@@ -104,6 +264,26 @@ const KnowledgeDetail: React.FC = () => {
           <p className="text-gray-500">难度：{knowledge.difficulty}</p>
         </div>
       </div>
+
+      {/* 学习前置依赖 */}
+      {prerequisites.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <p className="text-xs font-medium text-gray-500 mb-2">学习前置（建议先学）</p>
+          <div className="flex flex-wrap gap-2">
+            {prerequisites.map((pre) => (
+              <Link
+                key={pre.id}
+                to={`/knowledge/${pre.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                title={pre.description || pre.name}
+              >
+                <BookOpen size={13} className="text-gray-400" />
+                {pre.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {lectures.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-500">
@@ -147,8 +327,13 @@ const KnowledgeDetail: React.FC = () => {
           {currentLecture ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
               <h2 className="text-xl font-semibold mb-4">{currentLecture.title}</h2>
-              <article className="prose max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
-                {currentLecture.content}
+              <article className="prose prose-slate max-w-none prose-headings:font-semibold prose-code:before:hidden prose-code:after:hidden prose-pre:p-4 prose-pre:rounded-lg">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[[rehypeHighlight, { detect: true }], rehypeKatex]}
+                >
+                  {preprocessTabs(preprocessAdmonition(currentLecture.content))}
+                </ReactMarkdown>
               </article>
             </div>
           ) : (
@@ -166,12 +351,50 @@ const KnowledgeDetail: React.FC = () => {
         </div>
       )}
 
+      {/* 代码模板区 */}
+      {templates.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Code2 size={20} className="text-purple-600" />
+            <h2 className="text-lg font-semibold text-gray-900">代码模板</h2>
+            <span className="text-xs text-gray-500">({templates.length})</span>
+          </div>
+          <div className="space-y-4">
+            {templates.map((tpl) => (
+              <div key={tpl.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                      {tpl.language}
+                    </span>
+                    {tpl.explanation && (
+                      <span className="text-xs text-gray-600">{tpl.explanation}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(tpl.template_code, tpl.id)}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                  >
+                    <Copy size={12} />
+                    {copiedTpl === tpl.id ? '已复制' : '复制'}
+                  </button>
+                </div>
+                <pre className="bg-gray-900 text-gray-100 text-sm p-4 overflow-x-auto leading-relaxed">
+                  <code>{tpl.template_code}</code>
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between">
         <Link
           to="/knowledge"
           className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
-          返回图谱
+          返回路线图
         </Link>
         <Link
           to={`/problems?kp=${knowledge.slug}`}
@@ -180,17 +403,6 @@ const KnowledgeDetail: React.FC = () => {
           去做练习题 →
         </Link>
       </div>
-
-      {/* 保留复制按钮逻辑供模板代码使用 */}
-      <button
-        type="button"
-        onClick={() => handleCopy(knowledge.description || '')}
-        className="hidden"
-        aria-hidden
-      >
-        <Copy size={16} />
-        {copied ? '已复制' : '复制'}
-      </button>
     </div>
   )
 }

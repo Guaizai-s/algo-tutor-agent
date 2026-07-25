@@ -33,6 +33,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="knowledge" element={<KnowledgeTree />} />
+          <Route path="knowledge/graph" element={<Navigate to="/knowledge" replace />} />
           <Route path="knowledge/:id" element={<KnowledgeDetail />} />
           <Route path="problems" element={<ProblemList />} />
           <Route path="problems/:id" element={<ProblemDetail />} />
