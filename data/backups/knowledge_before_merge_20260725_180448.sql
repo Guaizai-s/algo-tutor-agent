@@ -2792,4 +2792,3 @@ ALTER TABLE ONLY public.lectures
 --
 
 \unrestrict oB6R0H1qVdCpW8TJZ7FvgubzDmqNfKnvgcXTuLyfJ4MWRAm6VaQclFzWgd3dxWV
-

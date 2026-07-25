@@ -2882,4 +2882,3 @@ ALTER TABLE ONLY public.lectures
 --
 
 \unrestrict Di6FgRWqP0GVEwfpA8ACKpvzKviTlfNa1TAjfSB6d9CC53Pp81X0JUcE9yKrPIu
-
