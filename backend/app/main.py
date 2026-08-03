@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
-from app.routers import agent, knowledge, problems
+from app.routers import agent, auth, knowledge, learning, problems, progress
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +46,10 @@ app.add_middleware(
 app.include_router(knowledge.router, prefix=settings.API_V1_STR)
 app.include_router(problems.router, prefix=settings.API_V1_STR)
 app.include_router(agent.router, prefix=settings.API_V1_STR)
+app.include_router(learning.path_router, prefix=settings.API_V1_STR)
+app.include_router(learning.daily_router, prefix=settings.API_V1_STR)
+app.include_router(progress.router, prefix=settings.API_V1_STR)
+app.include_router(auth.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

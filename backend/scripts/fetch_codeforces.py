@@ -94,7 +94,7 @@ def main() -> None:
     if data.get("status") != "OK":
         raise RuntimeError(f"CF API failed: {data}")
     problems = data["result"]["problems"]
-    print(f"  got {len(problems)} problems in {time.time()-t0:.1f}s")
+    print(f"  got {len(problems)} problems in {time.time() - t0:.1f}s")
 
     # 1) tags.json
     from collections import Counter

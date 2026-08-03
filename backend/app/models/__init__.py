@@ -7,6 +7,22 @@ from app.models.knowledge import (
     Lecture,
     LectureLevel,
 )
+from app.models.learning import (
+    CONSECUTIVE_WA_THRESHOLD,
+    MASTERY_THRESHOLD,
+    WEAK_MASTERY_THRESHOLD,
+    DailyTask,
+    DailyTaskItem,
+    DailyTaskItemStatus,
+    DailyTaskItemType,
+    LearningPath,
+    LearningPathItem,
+    LearningProfile,
+    PathItemKind,
+    PathItemStatus,
+    UserKnowledgeState,
+    UserProblemAC,
+)
 from app.models.problem import (
     Problem,
     ProblemDifficulty,
@@ -16,6 +32,7 @@ from app.models.problem import (
     Solution,
     SolutionComment,
 )
+from app.models.user import TargetMedal, User, UserRole
 
 __all__ = [
     "TimestampMixin",
@@ -33,4 +50,23 @@ __all__ = [
     "ProblemVariant",
     "Solution",
     "SolutionComment",
+    # Task 10 学习路径与推送引擎
+    "UserKnowledgeState",
+    "UserProblemAC",
+    "LearningProfile",
+    "LearningPath",
+    "LearningPathItem",
+    "PathItemKind",
+    "PathItemStatus",
+    "DailyTask",
+    "DailyTaskItem",
+    "DailyTaskItemStatus",
+    "DailyTaskItemType",
+    "MASTERY_THRESHOLD",
+    "WEAK_MASTERY_THRESHOLD",
+    "CONSECUTIVE_WA_THRESHOLD",
+    # Task 2 用户认证
+    "User",
+    "UserRole",
+    "TargetMedal",
 ]

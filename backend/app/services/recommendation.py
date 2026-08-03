@@ -1,0 +1,149 @@
+"""题目推荐查询逻辑 service (Task 10.4)。
+
+核心规则：
+- 通过 ProblemKnowledgePoint 限定知识点
+- 仅查询 published 问题
+- 排除该用户已 AC 的题目
+- 按 cf_rating ASC 排序，相同 rating 按 created_at, title 稳定次级排序
+- 正确处理 cf_rating IS NULL：未定级题不混入依赖 rating 区间的槽位
+"""
+
+from __future__ import annotations
+
+import logging
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.learning import LearningProfile, UserProblemAC
+from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
+from app.schemas.learning import ProblemRef
+
+logger = logging.getLogger(__name__)
+
+
+async def _load_ac_problem_ids(db: AsyncSession, user_id: UUID) -> set[UUID]:
+    """加载用户已 AC 的题目 id 集合。"""
+    rows = (await db.execute(select(UserProblemAC.problem_id).where(UserProblemAC.user_id == user_id))).scalars().all()
+    return set(rows)
+
+
+async def _load_or_create_profile(db: AsyncSession, user_id: UUID) -> LearningProfile:
+    """加载或创建用户学习画像（默认 1200-1600 银牌向）。"""
+    profile = (await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))).scalar_one_or_none()
+    if profile is None:
+        profile = LearningProfile(
+            user_id=user_id,
+            target_rating_min=1200,
+            target_rating_max=1600,
+        )
+        db.add(profile)
+        await db.flush()
+    return profile
+
+
+async def recommend_problems_by_knowledge(
+    db: AsyncSession,
+    user_id: UUID,
+    knowledge_id: UUID,
+    rating_min: float | None = None,
+    rating_max: float | None = None,
+    limit: int = 10,
+    exclude_ac: bool = True,
+    require_rating: bool = False,
+) -> list[Problem]:
+    """按知识点查询推荐题目。
+
+    Args:
+        knowledge_id: 必须通过 ProblemKnowledgePoint 关联
+        rating_min: cf_rating 下限（含）；None 表示不限
+        rating_max: cf_rating 上限（含）；None 表示不限
+        limit: 最多返回数量
+        exclude_ac: 是否排除已 AC 题目
+        require_rating: True 时仅返回 cf_rating NOT NULL 的题（用于 rating 槽位）
+    """
+    ac_ids = await _load_ac_problem_ids(db, user_id) if exclude_ac else set()
+
+    stmt = (
+        select(Problem)
+        .join(ProblemKnowledgePoint, ProblemKnowledgePoint.problem_id == Problem.id)
+        .where(
+            ProblemKnowledgePoint.knowledge_id == knowledge_id,
+            Problem.status == ProblemStatus.PUBLISHED,
+        )
+        .options(selectinload(Problem.knowledge_points))
+    )
+    if rating_min is not None:
+        stmt = stmt.where(Problem.cf_rating >= rating_min)
+    if rating_max is not None:
+        stmt = stmt.where(Problem.cf_rating <= rating_max)
+    if require_rating:
+        stmt = stmt.where(Problem.cf_rating.is_not(None))
+    if ac_ids:
+        stmt = stmt.where(Problem.id.notin_(ac_ids))
+
+    # 按 cf_rating ASC, 相同 rating 按 created_at ASC, title ASC 稳定排序
+    stmt = stmt.order_by(
+        Problem.cf_rating.asc(),
+        Problem.created_at.asc(),
+        Problem.title.asc(),
+    ).limit(limit)
+
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def recommend_for_slots(
+    db: AsyncSession,
+    user_id: UUID,
+    knowledge_id: UUID,
+) -> tuple[
+    list[Problem],
+    list[Problem],
+    list[Problem],
+    list[Problem],
+    LearningProfile,
+]:
+    """为当日任务四个槽位查询候选题。
+
+    返回 (template_candidates, application_candidates, challenge_candidates, no_rating_candidates, profile)：
+    - template: cf_rating <= target_min
+    - application: target_min <= cf_rating <= target_max
+    - challenge: cf_rating >= target_max
+    - no_rating: cf_rating IS NULL（仅作 fallback，不混入 rating 槽位）
+    """
+    profile = await _load_or_create_profile(db, user_id)
+    tmin = float(profile.target_rating_min)
+    tmax = float(profile.target_rating_max)
+
+    template = await recommend_problems_by_knowledge(
+        db, user_id, knowledge_id, rating_max=tmin, limit=5, require_rating=True
+    )
+    application = await recommend_problems_by_knowledge(
+        db,
+        user_id,
+        knowledge_id,
+        rating_min=tmin,
+        rating_max=tmax,
+        limit=5,
+        require_rating=True,
+    )
+    challenge = await recommend_problems_by_knowledge(
+        db, user_id, knowledge_id, rating_min=tmax, limit=5, require_rating=True
+    )
+    no_rating = await recommend_problems_by_knowledge(db, user_id, knowledge_id, limit=5, require_rating=False)
+    # no_rating 查询本身不过滤 require_rating，需手动取 IS NULL 的子集
+    no_rating = [p for p in no_rating if p.cf_rating is None]
+
+    return template, application, challenge, no_rating, profile
+
+
+def to_problem_ref(p: Problem) -> ProblemRef:
+    return ProblemRef(
+        id=p.id,
+        title=p.title,
+        slug=p.slug,
+        difficulty=p.difficulty.value,
+        cf_rating=p.cf_rating,
+    )
