@@ -48,6 +48,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      sandbox-build:
+        condition: service_completed_successfully
 
   frontend:
     build: ./frontend
@@ -93,12 +95,11 @@ services:
       redis:
         condition: service_healthy
 
-  # 沙箱镜像构建服务：仅构建，不常驻
-  # 使用 `docker compose --profile build up sandbox-build` 一次构建
+  # 沙箱镜像构建服务：启动时先完成镜像构建，不常驻。
+  # backend 依赖该一次性服务，避免首次启动时 execute_code 找不到镜像。
   sandbox-build:
     build: ./backend/sandbox
     image: algo-sandbox:latest
-    profiles: ["build"]
     command: ["echo", "sandbox image built"]
 
 volumes:
