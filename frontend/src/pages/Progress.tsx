@@ -8,8 +8,14 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { BarChart3, Trophy, Target, TrendingUp, Calendar, AlertCircle, Loader2 } from 'lucide-react'
-import { progressApi } from '../utils/api'
+import { progressApi, DEV_USER_ID } from '../utils/api'
 import type { Progress } from '../types'
+
+/**
+ * 格式化通过率：后端返回 0-1 浮点数，前端展示时 *100 并保留 1 位小数。
+ * 例如 0.5 → "50.0%"，0.333 → "33.3%"。
+ */
+const formatAcceptanceRate = (rate: number): string => `${(rate * 100).toFixed(1)}%`
 
 const ProgressPage: React.FC = () => {
   const [progress, setProgress] = useState<Progress | null>(null)
@@ -19,7 +25,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview()
+      .getOverview(DEV_USER_ID)
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
@@ -58,7 +64,7 @@ const ProgressPage: React.FC = () => {
         },
         {
           label: '通过率',
-          value: `${progress.acceptance_rate.toFixed(1)}%`,
+          value: formatAcceptanceRate(progress.acceptance_rate),
           icon: TrendingUp,
           color: 'text-purple-600 bg-purple-100',
         },
@@ -72,10 +78,12 @@ const ProgressPage: React.FC = () => {
       ]
     : []
 
-  // 通过率 < 60% 自动标记为薄弱点
+  // 薄弱知识点：严格使用后端 weak_knowledge_ids，不再前端推断。
+  // 通过 knowledge_id 映射名称与 mastery 百分比。
+  const weakIdSet = new Set(progress?.weak_knowledge_ids ?? [])
   const weakPoints =
     progress?.mastery_by_category
-      ?.filter((c) => c.value < 60)
+      ?.filter((c) => weakIdSet.has(c.knowledge_id))
       .map((c) => ({
         name: c.name,
         rate: c.value,
@@ -103,8 +111,8 @@ const ProgressPage: React.FC = () => {
           <div className="text-sm">
             <p className="font-medium">进度数据暂不可用</p>
             <p className="mt-1 text-yellow-700">
-              后端进度 API（Task 10）尚未实现。待 Role B 完成 <code>/api/v1/progress/overview</code>{' '}
-              后此页面将自动展示真实数据。
+              无法加载 <code>/api/v1/progress/overview</code> 的数据。请确认后端服务已启动、 user_id
+              参数合法后重试。
             </p>
           </div>
         </div>
@@ -199,6 +207,34 @@ const ProgressPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {progress.target_progress && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Target className="text-blue-500" size={20} />
+            训练目标完成进度
+          </h2>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-600">
+              目标 Rating 区间：{progress.target_progress.target_rating_min} -{' '}
+              {progress.target_progress.target_rating_max}
+            </span>
+            <span className="text-2xl font-bold text-gray-900">
+              {progress.target_progress.progress_percent}%
+            </span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all"
+              style={{ width: `${progress.target_progress.progress_percent}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            已掌握 {progress.target_progress.mastered_in_range} /{' '}
+            {progress.target_progress.total_in_range} 个知识点
+          </p>
+        </div>
+      )}
     </div>
   )
 }
