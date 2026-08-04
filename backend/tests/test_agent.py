@@ -106,42 +106,42 @@ async def test_agent_calls_problem_search(db_session, seed_data):
 
 @pytest.mark.asyncio
 async def test_agent_calls_knowledge_search(db_session, seed_data):
-    """Test 3: Agent triggers search_knowledge and returns references."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    """Test 3: Agent triggers search_knowledge and returns references.
 
+    RAGService must share the test db_session so it can read seed_data inside
+    the uncommitted transaction. Using an independent engine/session would
+    not see seed_data and the keyword fallback would return [].
+    """
     from app.services.rag import RAGService
-    from tests.conftest import TEST_DATABASE_URL
 
-    engine = create_async_engine(TEST_DATABASE_URL)
-    factory = async_sessionmaker(engine, class_=type(db_session), expire_on_commit=False)
-    rag = RAGService(factory, openai_svc=None)
+    # Reuse the test session via _DummyFactory so RAG reads seed_data inside
+    # the same uncommitted transaction.
+    factory = _DummyFactory(db_session)
+    rag = RAGService(factory, openai_svc=None)  # type: ignore[arg-type]
     rag._pgvector_available = False  # force keyword fallback
 
-    try:
-        openai_svc = _make_openai_mock(
-            [
-                _Resp(
-                    [
-                        _Choice(
-                            _Message(
-                                content=None,
-                                tool_calls=[_ToolCall("search_knowledge", {"query": "动态规划", "limit": 5})],
-                            )
+    openai_svc = _make_openai_mock(
+        [
+            _Resp(
+                [
+                    _Choice(
+                        _Message(
+                            content=None,
+                            tool_calls=[_ToolCall("search_knowledge", {"query": "动态规划", "limit": 5})],
                         )
-                    ]
-                ),
-                _Resp([_Choice(_Message(content="知识库中有相关讲义，参见引用。"))]),
-            ]
-        )
+                    )
+                ]
+            ),
+            _Resp([_Choice(_Message(content="知识库中有相关讲义，参见引用。"))]),
+        ]
+    )
 
-        agent = TutorAgent(openai_svc, factory, rag)
-        req = AgentChatRequest(message="解释动态规划")
-        resp = await agent.run(req)
-        assert any(tc.name == "search_knowledge" for tc in resp.tool_calls)
-        # keyword fallback should find our seeded lecture.
-        assert any(r.type == "knowledge" for r in resp.references)
-    finally:
-        await engine.dispose()
+    agent = TutorAgent(openai_svc, factory, rag)  # type: ignore[arg-type]
+    req = AgentChatRequest(message="解释动态规划")
+    resp = await agent.run(req)
+    assert any(tc.name == "search_knowledge" for tc in resp.tool_calls)
+    # keyword fallback should find our seeded lecture.
+    assert any(r.type == "knowledge" for r in resp.references)
 
 
 @pytest.mark.asyncio

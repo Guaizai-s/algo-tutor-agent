@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react'
-import { progressApi } from '../utils/api'
+import { progressApi, DEV_USER_ID } from '../utils/api'
 import type { Progress } from '../types'
 
 const Dashboard: React.FC = () => {
@@ -20,13 +20,13 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview()
+      .getOverview(DEV_USER_ID)
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        // 进度 API 尚未由后端实现（Task 10）。降级为空状态而不是崩溃。
+        // 进度 API 尚未由后端实现（Task 11）。降级为空状态而不是崩溃。
         const msg = err instanceof Error ? err.message : '进度数据暂不可用'
         setProgressError(msg)
       })
@@ -92,7 +92,7 @@ const Dashboard: React.FC = () => {
           <div className="text-sm">
             <p className="font-medium">学习进度数据暂不可用</p>
             <p className="mt-1 text-yellow-700">
-              后端进度 API（Task 10）尚未实现，下面快捷入口仍可使用。
+              后端进度 API（Task 11）尚未实现，下面快捷入口仍可使用。
             </p>
           </div>
         </div>

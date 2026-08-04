@@ -14,5 +14,16 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Provide a transactional session.
+
+    Writes are committed when the endpoint returns successfully; on exception
+    the session is rolled back so partial changes are not persisted.
+    """
     async with async_session_maker() as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            await session.commit()

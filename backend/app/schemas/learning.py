@@ -1,0 +1,161 @@
+"""Learning path & daily task Pydantic schemas (API 契约, Task 10)。
+
+注意：所有响应都使用 schema，不直接返回 ORM 对象或 dict。
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from app.models.learning import (
+    DailyTaskItemStatus,
+    DailyTaskItemType,
+    PathItemKind,
+    PathItemStatus,
+)
+from app.schemas.common import BaseSchema
+
+# ===== 共享子结构 =====
+
+
+class KnowledgePointRef(BaseSchema):
+    """知识点精简引用。"""
+
+    id: UUID
+    name: str
+    slug: str
+
+
+class ProblemRef(BaseSchema):
+    """题目精简引用。"""
+
+    id: UUID
+    title: str
+    slug: str
+    difficulty: str
+    cf_rating: float | None = None
+
+
+class LectureRef(BaseSchema):
+    """讲义精简引用。"""
+
+    id: UUID
+    knowledge_id: UUID
+    level: str
+    title: str
+
+
+# ===== 10.1 路径生成 =====
+
+
+class LearningPathGenerateRequest(BaseSchema):
+    """生成学习路径请求。
+
+    COMPAT: user_id 显式传入，等认证落地后改为从 token 解析。
+    """
+
+    user_id: UUID
+    preview_count: int = Field(default=8, ge=5, le=10)
+
+
+class LearningPathItemRead(BaseSchema):
+    id: UUID
+    knowledge_id: UUID
+    position: int
+    kind: PathItemKind
+    status: PathItemStatus
+    knowledge: KnowledgePointRef
+
+
+class LearningPathRead(BaseSchema):
+    id: UUID
+    user_id: UUID
+    is_active: bool
+    items: list[LearningPathItemRead]
+
+
+# ===== 10.2 路径动态调整 =====
+
+
+class AttemptRequest(BaseSchema):
+    """记录一次做题结果（用于驱动路径动态调整）。
+
+    COMPAT: user_id 显式传入。
+
+    注意：mastery 由服务端按 spec 计算（AC 题数 / 关联题目总数），
+    客户端不得通过 new_mastery 覆盖。该字段保留仅为向后兼容，
+    服务端会忽略它（deprecated）。
+    """
+
+    user_id: UUID
+    knowledge_id: UUID
+    problem_id: UUID
+    verdict: str = Field(..., description="AC / WA / TLE / RE 等")
+    # DEPRECATED: 客户端传入的 new_mastery 会被服务端忽略。
+    # mastery 始终由服务端按 spec 计算（AC/总数）。
+    new_mastery: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="[DEPRECATED] 服务端忽略此字段，mastery 由服务端按 spec 计算",
+    )
+
+
+class AttemptResponse(BaseSchema):
+    user_id: UUID
+    knowledge_id: UUID
+    consecutive_wa: int
+    is_weak: bool
+    mastery: float
+    remediation_inserted: bool = Field(..., description="本次是否在路径中插入或提升了一个补漏任务")
+
+
+# ===== 10.3 当日任务 =====
+
+
+class DailyTaskItemRead(BaseSchema):
+    id: UUID
+    item_type: DailyTaskItemType
+    position: int
+    lecture: LectureRef | None = None
+    problem: ProblemRef | None = None
+    status: DailyTaskItemStatus
+    missing_reason: str | None = None
+
+
+class DailyTaskRead(BaseSchema):
+    id: UUID
+    user_id: UUID
+    task_date: date
+    knowledge: KnowledgePointRef
+    is_remediation: bool
+    missing_slots: list[str]
+    items: list[DailyTaskItemRead]
+
+
+class DailyTaskPathPreviewItem(BaseModel):
+    """路径预览项（当日任务接口附带）。"""
+
+    knowledge_id: UUID
+    name: str
+    position: int
+    kind: PathItemKind
+
+
+class DailyTaskTodayResponse(BaseSchema):
+    """当日任务 + 路径预览聚合响应。"""
+
+    task: DailyTaskRead
+    path_preview: list[DailyTaskPathPreviewItem]
+
+
+# ===== internal helpers (not exposed as API) =====
+
+
+class _MissingSlots(BaseModel):
+    """内部用：缺失槽位收集。"""
+
+    slots: list[str] = Field(default_factory=list)

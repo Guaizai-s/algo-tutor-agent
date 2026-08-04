@@ -43,6 +43,20 @@ class Settings(BaseSettings):
     RAG_DEFAULT_LIMIT: int = 5
     RAG_MAX_LIMIT: int = 10
 
+    # Codeforces API (Task 8)
+    CF_API_BASE_URL: str = "https://codeforces.com/api"
+    # spec: 全局速率限制 >= 2 秒/次，跨 worker 通过 Redis 共享
+    CF_API_MIN_INTERVAL_SEC: float = 2.0
+    CF_API_CONNECT_TIMEOUT_SEC: float = 10.0
+    CF_API_READ_TIMEOUT_SEC: float = 30.0
+    CF_API_MAX_RETRIES: int = 5
+    CF_API_BACKOFF_BASE_SEC: float = 1.0
+    CF_API_BACKOFF_MAX_SEC: float = 60.0
+
+    # 用户时区（用于 streak_days 自然日计算）
+    # 数据库/容器运行在 UTC，但用户在 Asia/Shanghai
+    USER_TIMEZONE: str = "Asia/Shanghai"
+
     # CORS（从 .env 读 list[str] 时需写成 JSON 数组：["http://..."]）
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 

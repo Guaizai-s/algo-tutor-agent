@@ -6,6 +6,7 @@ Returns published problems. Never exposes test_cases in any response.
 from __future__ import annotations
 
 import logging
+import math
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,10 +14,12 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.knowledge import KnowledgePoint
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
-from app.schemas.problem import ProblemListResponse, ProblemRead
+from app.schemas.problem import CodeExecutionRequest, CodeExecutionResponse, ProblemListResponse, ProblemRead
+from app.tools import code_execution
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ def _to_read(p: Problem) -> ProblemRead:
             "knowledge_point_ids": [kp.id for kp in (p.knowledge_points or [])],
             "submit_count": p.submit_count,
             "accepted_count": p.accepted_count,
+            "cf_rating": p.cf_rating,
             "created_at": p.created_at,
             "updated_at": p.updated_at,
         }
@@ -133,3 +137,53 @@ async def get_problem(
     if p is None:
         raise HTTPException(status_code=404, detail="problem not found or not published")
     return _to_read(p)
+
+
+@router.post("/{problem_id}/execute", response_model=CodeExecutionResponse)
+async def execute_problem_code(
+    problem_id: UUID,
+    req: CodeExecutionRequest,
+    db: AsyncSession = Depends(get_db),
+) -> CodeExecutionResponse:
+    """在沙箱中直接运行代码，不让 LLM 参与执行关键路径。
+
+    有样例输入时使用样例输入；Codeforces 外链题目前没有同步题面和样例，
+    因此只能使用空输入运行，并明确告知调用方该结果不代表 AC。
+    """
+    p = (
+        await db.execute(
+            select(Problem).where(
+                Problem.id == problem_id,
+                Problem.status == ProblemStatus.PUBLISHED,
+            )
+        )
+    ).scalar_one_or_none()
+    if p is None:
+        raise HTTPException(status_code=404, detail="problem not found or not published")
+
+    input_source = "sample" if p.sample_input is not None else "empty"
+    timeout_ms = max(100, min(p.time_limit_ms, settings.SANDBOX_MAX_TIMEOUT_MS))
+    problem_memory_mb = math.ceil(p.memory_limit_kb / 1024)
+    memory_limit_mb = max(16, min(problem_memory_mb, settings.SANDBOX_MAX_MEMORY_MB))
+
+    result = await code_execution.execute(
+        {
+            "language": req.language,
+            "code": req.code,
+            "stdin": p.sample_input or "",
+            "timeout_ms": timeout_ms,
+            "memory_limit_mb": memory_limit_mb,
+        }
+    )
+    message = (
+        "已使用题目样例输入运行；运行成功不等于通过全部测试。"
+        if input_source == "sample"
+        else "题目未提供样例输入，已使用空输入运行；此结果不代表通过题目。"
+    )
+    return CodeExecutionResponse.model_validate(
+        {
+            **result,
+            "input_source": input_source,
+            "message": message,
+        }
+    )

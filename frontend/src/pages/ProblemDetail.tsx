@@ -12,20 +12,10 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import Editor from '@monaco-editor/react'
-import { agentApi, problemsApi } from '../utils/api'
-import type { Problem } from '../types'
+import { problemsApi } from '../utils/api'
+import type { CodeExecutionResult, Problem } from '../types'
 
 type Lang = 'python' | 'cpp' | 'java'
-type ExecStatus = 'success' | 'compile_error' | 'runtime_error' | 'timeout' | 'internal_error'
-
-interface ExecResult {
-  status: ExecStatus
-  stdout: string
-  stderr: string
-  exit_code: number
-  time_used_ms: number
-  truncated: boolean
-}
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   easy: '简单',
@@ -46,7 +36,7 @@ const ProblemDetail: React.FC = () => {
   const [code, setCode] = useState('')
   const [language, setLanguage] = useState<Lang>('python')
   const [isJudging, setIsJudging] = useState(false)
-  const [result, setResult] = useState<ExecResult | null>(null)
+  const [result, setResult] = useState<CodeExecutionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hintLevel, setHintLevel] = useState(0)
 
@@ -95,35 +85,17 @@ const ProblemDetail: React.FC = () => {
   const hints = problem.hints || []
 
   const handleSubmit = async () => {
+    if (!id) {
+      setError('缺少题目 ID，无法运行代码')
+      return
+    }
     setIsJudging(true)
     setResult(null)
     setError(null)
     try {
-      // 通过 Agent chat context 调用 execute_code 工具执行用户代码。
-      // Agent 返回结构化 tool_calls 状态，前端据此展示执行结果。
-      const resp = await agentApi.chat({
-        message:
-          '请执行我当前的代码，并告诉我运行结果（stdout/stderr/exit_code）以及是否通过样例。',
-        history: [],
-        context: {
-          problem_id: id,
-          language,
-          code,
-        },
-      })
-      const data = resp.data
-      const execCall = data.tool_calls?.find((tc) => tc.name === 'execute_code')
-      // 仅当 execute_code 工具被调用且状态为 success 时才认为执行成功；
-      // 否则一律视为 internal_error，禁止固定显示 AC。
-      const status: ExecStatus = execCall?.status === 'success' ? 'success' : 'internal_error'
-      setResult({
-        status,
-        stdout: '',
-        stderr: status === 'internal_error' ? data.message : '',
-        exit_code: status === 'success' ? 0 : -1,
-        time_used_ms: 0,
-        truncated: false,
-      })
+      // 代码执行是确定性后端操作，不经过耗时且可能重复调用工具的 Agent。
+      const resp = await problemsApi.execute(id, code, language)
+      setResult(resp.data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '提交失败，请重试'
       setError(msg)
@@ -267,7 +239,7 @@ const ProblemDetail: React.FC = () => {
                 className="flex items-center gap-2 px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
               >
                 <Send size={16} />
-                {isJudging ? '判题中...' : '提交'}
+                {isJudging ? '运行中...' : '运行代码'}
               </button>
             </div>
           </div>
@@ -318,6 +290,7 @@ const ProblemDetail: React.FC = () => {
               </div>
 
               <div className="space-y-3">
+                <p className="text-sm text-yellow-300">{result.message}</p>
                 {result.stdout && (
                   <div>
                     <p className="text-sm text-gray-400 mb-1">标准输出</p>
