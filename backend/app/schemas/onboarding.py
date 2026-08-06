@@ -27,6 +27,9 @@ class ColdStartResponse(BaseSchema):
     mapped_knowledge_points: int = 0
     learning_path_id: UUID | None = None
     diagnostic_problems: list[DiagnosticProblemRead] = Field(default_factory=list)
+    diagnostic_problem_count: int = 0
+    diagnostic_knowledge_count: int = 0
+    diagnostic_ready: bool = False
     message: str
     sync_error: str | None = None
 

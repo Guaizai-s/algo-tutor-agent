@@ -225,6 +225,40 @@ async def test_weak_node_kept_as_remediation(db_session: AsyncSession, kp_chain:
     assert c_item.kind == PathItemKind.REMEDIATION
 
 
+@pytest.mark.asyncio
+async def test_path_starts_with_weak_then_furthest_mastered_descendant(
+    db_session: AsyncSession,
+    kp_chain: dict[str, UUID],
+):
+    """起点定标优先补漏，再从已掌握最远节点的下一后代继续。"""
+    user_id = uuid4()
+    for name in ("A", "B"):
+        db_session.add(
+            UserKnowledgeState(
+                user_id=user_id,
+                knowledge_id=kp_chain[name],
+                mastery=0.9,
+                is_weak=False,
+                consecutive_wa=0,
+            )
+        )
+    db_session.add(
+        UserKnowledgeState(
+            user_id=user_id,
+            knowledge_id=kp_chain["D"],
+            mastery=0.2,
+            is_weak=True,
+            consecutive_wa=3,
+        )
+    )
+    await db_session.flush()
+
+    path = await generate_learning_path(db_session, user_id, preview_count=5)
+
+    assert [item.knowledge_id for item in path.items[:2]] == [kp_chain["D"], kp_chain["C"]]
+    assert path.items[0].status.value == "active"
+
+
 # ===== 4. 环检测返回明确错误 =====
 
 
@@ -549,6 +583,56 @@ async def test_missing_slots_when_no_problems(db_session: AsyncSession, kp_chain
     assert DailyTaskItemType.CHALLENGE_PROBLEM.value in resp.task.missing_slots
     # CARD 讲义不缺失
     assert DailyTaskItemType.LECTURE_CARD.value not in resp.task.missing_slots
+
+
+@pytest.mark.asyncio
+async def test_daily_task_uses_same_knowledge_rating_fallback(
+    db_session: AsyncSession,
+    kp_chain: dict[str, UUID],
+    card_lecture: UUID,
+):
+    """严格 Rating 区间为空时，四个题目槽位使用同知识点候选降级补齐。"""
+    from app.models.problem import ProblemKnowledgePoint
+
+    user_id = uuid4()
+    for name in ("A", "B"):
+        db_session.add(
+            UserKnowledgeState(
+                user_id=user_id,
+                knowledge_id=kp_chain[name],
+                mastery=0.9,
+                is_weak=False,
+                consecutive_wa=0,
+            )
+        )
+    problems = [
+        Problem(
+            title=f"未定级候选 {index}",
+            slug=f"unrated-fallback-{index}-{uuid4().hex[:8]}",
+            description="rating fallback",
+            difficulty=ProblemDifficulty.MEDIUM,
+            status=ProblemStatus.PUBLISHED,
+            cf_rating=None,
+        )
+        for index in range(4)
+    ]
+    db_session.add_all(problems)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            ProblemKnowledgePoint(problem_id=problem.id, knowledge_id=kp_chain["C"])
+            for problem in problems
+        ]
+    )
+    await db_session.flush()
+    await generate_learning_path(db_session, user_id, preview_count=5)
+
+    response = await get_or_create_today_task(db_session, user_id)
+    problem_items = [item for item in response.task.items if item.problem is not None]
+
+    assert response.task.missing_slots == []
+    assert len(problem_items) == 4
+    assert len({item.problem.id for item in problem_items if item.problem}) == 4
 
 
 # ===== 14. API 集成测试 =====

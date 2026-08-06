@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Agent
     AGENT_MAX_TOOL_ROUNDS: int = 5
     AGENT_REQUEST_TIMEOUT_SEC: float = 60.0
+    AGENT_DAILY_REQUEST_LIMIT: int = 20
 
     # 代码执行沙箱
     SANDBOX_IMAGE: str = "algo-sandbox:latest"

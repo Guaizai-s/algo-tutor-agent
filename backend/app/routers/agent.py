@@ -10,18 +10,16 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 from openai import OpenAIError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tutor_agent import TutorAgent
-from app.core.database import async_session_maker, get_db
+from app.core.database import async_session_maker
+from app.core.deps import CurrentUser
 from app.schemas.agent import AgentChatRequest, AgentChatResponse
+from app.services.agent_quota import AgentQuotaExceededError, consume_agent_quota
 from app.services.openai_service import get_openai
 
 if TYPE_CHECKING:
     from app.services.rag import RAGService
-
-# TODO(auth): add identity / rate-limit dependency here once auth module lands.
-# from app.core.deps import get_current_user  # not yet implemented
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +37,15 @@ def _get_rag() -> RAGService:
 @router.post("/chat", response_model=AgentChatResponse)
 async def agent_chat(
     req: AgentChatRequest,
+    current_user: CurrentUser,
     openai=Depends(get_openai),
-    db: AsyncSession = Depends(get_db),
 ) -> AgentChatResponse:
-    # db is injected to keep router contract consistent with the rest of the API,
-    # but the agent uses its own session per tool call to avoid long transactions.
-    _ = db  # noqa: F841
+    try:
+        await consume_agent_quota(current_user.id)
+    except AgentQuotaExceededError:
+        raise HTTPException(status_code=429, detail="今日 AI Tutor 调用次数已用完") from None
     rag = _get_rag()
-    agent = TutorAgent(openai, async_session_maker, rag)
+    agent = TutorAgent(openai, async_session_maker, rag, user_id=current_user.id)
     try:
         return await agent.run(req)
     except OpenAIError as exc:

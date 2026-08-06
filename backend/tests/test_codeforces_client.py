@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import time
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -272,8 +272,8 @@ async def test_rate_limit_waits_for_interval():
     # 第一次 set 返回 True（获得锁）
     mock_redis.set = AsyncMock(return_value=True)
     # 模拟上次调用时间戳是 0.5 秒前
-    loop_time = asyncio.get_event_loop().time()
-    mock_redis.get = AsyncMock(return_value=str(loop_time - 0.5))
+    wall_time = time.time()
+    mock_redis.get = AsyncMock(return_value=str(wall_time - 0.5))
 
     client = CodeforcesClient(
         redis=mock_redis,

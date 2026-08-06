@@ -44,6 +44,9 @@ export interface ColdStartResponse {
   mapped_knowledge_points: number
   learning_path_id: string | null
   diagnostic_problems: DiagnosticProblem[]
+  diagnostic_problem_count: number
+  diagnostic_knowledge_count: number
+  diagnostic_ready: boolean
   message: string
   sync_error: string | null
 }

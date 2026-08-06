@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -10,10 +11,12 @@ from sqlalchemy import select
 from app.core.deps import get_codeforces_api_client
 from app.main import app
 from app.models.codeforces import CodeforcesAccount
+from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningPath, UserProblemAC
-from app.models.problem import Problem
+from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.wrongbook import WrongBookEntry
 from app.services.codeforces.sync import sync_user_status
+from app.services.onboarding import select_diagnostic_problems
 
 
 class FakeCodeforcesClient:
@@ -118,6 +121,50 @@ async def test_minimal_diagnostic_cold_start(client, auth_user, fake_cf, seed_da
     ).scalar_one()
     assert ac is not None
     assert path is not None
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_selector_reaches_fifteen_problems_and_ten_knowledge_points(
+    db_session,
+    seed_data,
+):
+    suffix = uuid4().hex[:8]
+    knowledge_points = [
+        KnowledgePoint(
+            name=f"诊断知识点 {index}-{suffix}",
+            slug=f"diagnostic-kp-{index}-{suffix}",
+            order=index,
+        )
+        for index in range(9)
+    ]
+    db_session.add_all(knowledge_points)
+    await db_session.flush()
+
+    difficulties = (
+        [ProblemDifficulty.EASY] * 4
+        + [ProblemDifficulty.MEDIUM] * 7
+        + [ProblemDifficulty.HARD] * 3
+    )
+    for index, difficulty in enumerate(difficulties):
+        problem = Problem(
+            title=f"诊断题 {index}-{suffix}",
+            slug=f"diagnostic-problem-{index}-{suffix}",
+            description="覆盖诊断题选择器",
+            difficulty=difficulty,
+            status=ProblemStatus.PUBLISHED,
+            submit_count=index,
+        )
+        problem.knowledge_points = [knowledge_points[index % len(knowledge_points)]]
+        db_session.add(problem)
+    await db_session.flush()
+
+    selected = await select_diagnostic_problems(db_session)
+
+    assert len(selected) == 15
+    assert len({knowledge_id for problem in selected for knowledge_id in problem.knowledge_point_ids}) >= 10
+    assert sum(problem.difficulty == "easy" for problem in selected) == 5
+    assert sum(problem.difficulty == "medium" for problem in selected) == 7
+    assert sum(problem.difficulty == "hard" for problem in selected) == 3
 
 
 @pytest.mark.asyncio

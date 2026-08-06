@@ -113,6 +113,73 @@ def topological_sort(
     return result
 
 
+def calibrate_starting_order(
+    topo: list[UUID],
+    adj: dict[UUID, list[UUID]],
+    user_states: dict[UUID, UserKnowledgeState],
+) -> list[UUID]:
+    """按用户当前水平重新排列路径起点，同时保持依赖安全。
+
+    优先级：
+    1. 薄弱节点，先进入补漏；
+    2. 用户已掌握最远节点的可学习后代；
+    3. 其他前置均已掌握的下一可学节点；
+    4. 尚未解锁的节点，保持原拓扑顺序。
+    """
+    topo_position = {knowledge_id: index for index, knowledge_id in enumerate(topo)}
+    mastered = {
+        knowledge_id
+        for knowledge_id, state in user_states.items()
+        if state.mastery >= MASTERY_THRESHOLD
+        and not state.is_weak
+        and knowledge_id in topo_position
+    }
+    weak = {
+        knowledge_id
+        for knowledge_id, state in user_states.items()
+        if state.is_weak and knowledge_id in topo_position
+    }
+
+    prereq_map: dict[UUID, list[UUID]] = defaultdict(list)
+    for prerequisite_id, descendants in adj.items():
+        for knowledge_id in descendants:
+            prereq_map[knowledge_id].append(prerequisite_id)
+
+    furthest_mastered = (
+        max(mastered, key=lambda knowledge_id: topo_position.get(knowledge_id, -1))
+        if mastered
+        else None
+    )
+    furthest_descendants: set[UUID] = set()
+    if furthest_mastered is not None:
+        queue: deque[UUID] = deque(adj.get(furthest_mastered, []))
+        while queue:
+            knowledge_id = queue.popleft()
+            if knowledge_id in furthest_descendants:
+                continue
+            furthest_descendants.add(knowledge_id)
+            queue.extend(adj.get(knowledge_id, []))
+
+    unmastered = [knowledge_id for knowledge_id in topo if knowledge_id not in mastered]
+    next_learnable = {
+        knowledge_id
+        for knowledge_id in unmastered
+        if knowledge_id not in weak
+        and all(prerequisite_id in mastered for prerequisite_id in prereq_map.get(knowledge_id, []))
+    }
+
+    def priority(knowledge_id: UUID) -> tuple[int, int]:
+        if knowledge_id in weak:
+            return (0, topo_position[knowledge_id])
+        if knowledge_id in next_learnable and knowledge_id in furthest_descendants:
+            return (1, topo_position[knowledge_id])
+        if knowledge_id in next_learnable:
+            return (2, topo_position[knowledge_id])
+        return (3, topo_position[knowledge_id])
+
+    return sorted(unmastered, key=priority)
+
+
 async def _load_user_states(db: AsyncSession, user_id: UUID) -> dict[UUID, UserKnowledgeState]:
     """加载用户所有知识点状态。"""
     rows = (await db.execute(select(UserKnowledgeState).where(UserKnowledgeState.user_id == user_id))).scalars().all()
@@ -136,6 +203,7 @@ async def generate_learning_path(
     kp_map, adj = await _load_dag(db)
     topo = topological_sort(kp_map, adj)
     user_states = await _load_user_states(db, user_id)
+    calibrated_order = calibrate_starting_order(topo, adj, user_states)
 
     # 计算每个节点的"前置是否全部已掌握"（用于判断 active vs pending）
     mastered_set: set[UUID] = set()
@@ -150,7 +218,7 @@ async def generate_learning_path(
             prereq_map[d].append(src)
 
     items_to_add: list[tuple[UUID, PathItemKind, PathItemStatus]] = []
-    for kid in topo:
+    for kid in calibrated_order:
         st = user_states.get(kid)
         # 已掌握跳过
         if st and st.mastery >= MASTERY_THRESHOLD and not st.is_weak:
@@ -162,7 +230,8 @@ async def generate_learning_path(
             kind = PathItemKind.NORMAL
         # 判断前置是否满足
         prereqs = prereq_map.get(kid, [])
-        prereq_satisfied = all(p in mastered_set for p in prereqs)
+        # 薄弱节点需要立即补漏，即使其旧前置状态尚未达标，也应作为 active 起点。
+        prereq_satisfied = bool(st and st.is_weak) or all(p in mastered_set for p in prereqs)
         status = PathItemStatus.ACTIVE if prereq_satisfied else PathItemStatus.PENDING
         items_to_add.append((kid, kind, status))
 

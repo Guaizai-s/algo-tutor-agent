@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from typing import Any
 
 import httpx
@@ -102,7 +103,10 @@ class CodeforcesClient:
         try:
             # 读取上次调用时间戳
             last_ts = await self._redis.get(CF_RATE_LIMIT_KEY)
-            now = asyncio.get_event_loop().time()
+            # Redis 中的值会跨进程、跨容器重启复用，必须使用可比较的 Unix 墙钟。
+            # event_loop.time() 的基准只保证在当前进程内稳定，重启后会导致负 elapsed
+            # 和超长错误等待。
+            now = time.time()
             if last_ts is not None:
                 elapsed = now - float(last_ts)
                 wait = self._min_interval - elapsed
@@ -110,7 +114,7 @@ class CodeforcesClient:
                     logger.debug("CF API rate limit: waiting %.2fs", wait)
                     await asyncio.sleep(wait)
             # 更新最后调用时间戳
-            await self._redis.set(CF_RATE_LIMIT_KEY, str(asyncio.get_event_loop().time()))
+            await self._redis.set(CF_RATE_LIMIT_KEY, str(time.time()))
         finally:
             await self._redis.delete(CF_RATE_LIMIT_LOCK_KEY)
 

@@ -309,6 +309,16 @@ const Profile = () => {
           <p className="mt-1 text-sm text-gray-500">
             完成题目后勾选已通过项；未勾选项将作为薄弱点。
           </p>
+          <p
+            className={`mt-2 text-sm ${onboarding.diagnostic_ready ? 'text-green-700' : 'text-amber-700'}`}
+            role="status"
+          >
+            当前题单：{onboarding.diagnostic_problem_count} 道题，覆盖{' '}
+            {onboarding.diagnostic_knowledge_count} 个知识点
+            {onboarding.diagnostic_ready
+              ? '，已达到正式诊断标准。'
+              : '，内容不足时将按可用题目降级。'}
+          </p>
           {onboarding.diagnostic_problems.length ? (
             <div className="mt-4 space-y-2">
               {onboarding.diagnostic_problems.map((problem) => (

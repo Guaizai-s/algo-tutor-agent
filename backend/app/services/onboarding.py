@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.codeforces import CodeforcesAccount, Submission
 from app.models.learning import LearningPath, LearningProfile, UserKnowledgeState, UserProblemAC
@@ -30,6 +31,7 @@ from app.services.progress import recompute_mastery
 
 CF_HISTORY_MIN_SUBMISSIONS = 20
 DIAGNOSTIC_TOTAL = 15
+DIAGNOSTIC_KNOWLEDGE_TARGET = 10
 DIAGNOSTIC_QUOTAS = {
     ProblemDifficulty.EASY: 5,
     ProblemDifficulty.MEDIUM: 7,
@@ -60,6 +62,7 @@ async def get_onboarding_status(db: AsyncSession, user: User) -> ColdStartRespon
         current_rating=account.current_rating if account else None,
         submission_count=submission_count,
         diagnostic_problems=diagnostic,
+        **_diagnostic_summary(diagnostic),
         message="可使用 CF 历史或诊断题完成冷启动",
     )
 
@@ -71,10 +74,11 @@ async def start_cold_start(
 ) -> ColdStartResponse:
     account = await _get_account(db, user.id)
     sync_error: str | None = None
-    mapped = 0
+    # CF 题库是全局内容源，即使当前用户未绑定 CF，也要把已同步题目的
+    # cf_tags 映射到知识点，供诊断后的每日任务推荐使用。
+    mapped = await sync_cf_tag_knowledge_mappings(db)
 
     if account is not None:
-        mapped = await sync_cf_tag_knowledge_mappings(db)
         status_result = await sync_user_status(db, account, client)
         rating_result = await sync_user_rating(db, account, client)
         errors = [str(result["error"]) for result in (status_result, rating_result) if result.get("error")]
@@ -106,6 +110,7 @@ async def start_cold_start(
         submission_count=submission_count,
         mapped_knowledge_points=mapped,
         diagnostic_problems=diagnostic,
+        **_diagnostic_summary(diagnostic),
         message="CF 提交不足 20 条，请完成诊断题" if account else "请完成诊断题以生成初始学习路径",
         sync_error=sync_error,
     )
@@ -186,61 +191,32 @@ async def submit_diagnostic(
 
 
 async def select_diagnostic_problems(db: AsyncSession) -> list[DiagnosticProblemRead]:
-    """按 5 易 + 7 中 + 3 难尽量选取平台题，不足时用其他难度补齐。"""
-    selected: list[Problem] = []
-    selected_ids: set[UUID] = set()
-    for difficulty, limit in DIAGNOSTIC_QUOTAS.items():
-        rows = (
-            (
-                await db.execute(
-                    select(Problem)
-                    .where(
-                        Problem.source == ProblemSource.PLATFORM,
-                        Problem.status == ProblemStatus.PUBLISHED,
-                        Problem.difficulty == difficulty,
-                    )
-                    .order_by(Problem.submit_count.desc(), Problem.created_at.asc())
-                    .limit(limit)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        selected.extend(rows)
-        selected_ids.update(problem.id for problem in rows)
+    """选取 5 易 + 7 中 + 3 难，并优先覆盖至少 10 个知识点。
 
-    if len(selected) < DIAGNOSTIC_TOTAL:
-        extras = (
-            (
-                await db.execute(
-                    select(Problem)
-                    .where(
-                        Problem.source == ProblemSource.PLATFORM,
-                        Problem.status == ProblemStatus.PUBLISHED,
-                        ~Problem.id.in_(selected_ids) if selected_ids else True,
-                    )
-                    .order_by(Problem.difficulty.asc(), Problem.submit_count.desc())
-                    .limit(DIAGNOSTIC_TOTAL - len(selected))
+    当内容库客观不足时返回可用子集，并通过 ``diagnostic_ready`` 暴露降级状态；
+    选择过程完全确定，避免同一用户刷新后题单漂移。
+    """
+    candidates = list(
+        (
+            await db.execute(
+                select(Problem)
+                .where(
+                    Problem.source == ProblemSource.PLATFORM,
+                    Problem.status == ProblemStatus.PUBLISHED,
                 )
+                .options(selectinload(Problem.knowledge_points))
+                .order_by(Problem.submit_count.desc(), Problem.created_at.asc(), Problem.slug.asc())
             )
-            .scalars()
-            .all()
         )
-        selected.extend(extras)
+        .scalars()
+        .unique()
+        .all()
+    )
+    selected = _select_diagnostic_candidates(candidates)
 
     result: list[DiagnosticProblemRead] = []
     for problem in selected:
-        knowledge_ids = list(
-            (
-                await db.execute(
-                    select(ProblemKnowledgePoint.knowledge_id).where(
-                        ProblemKnowledgePoint.problem_id == problem.id
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        knowledge_ids = [knowledge.id for knowledge in problem.knowledge_points]
         result.append(
             DiagnosticProblemRead(
                 id=problem.id,
@@ -251,6 +227,88 @@ async def select_diagnostic_problems(db: AsyncSession) -> list[DiagnosticProblem
             )
         )
     return result
+
+
+def _select_diagnostic_candidates(candidates: list[Problem]) -> list[Problem]:
+    """在难度配额内贪心最大化知识点覆盖，然后稳定补齐各配额。"""
+    difficulty_order = {difficulty: index for index, difficulty in enumerate(DIAGNOSTIC_QUOTAS)}
+    remaining = dict(DIAGNOSTIC_QUOTAS)
+    selected: list[Problem] = []
+    selected_ids: set[UUID] = set()
+    covered: set[UUID] = set()
+
+    def knowledge_ids(problem: Problem) -> set[UUID]:
+        return {knowledge.id for knowledge in problem.knowledge_points}
+
+    # 第一阶段：每次选择能带来最多新知识点的题，并严格占用对应难度配额。
+    while len(covered) < DIAGNOSTIC_KNOWLEDGE_TARGET:
+        eligible = [
+            problem
+            for problem in candidates
+            if problem.id not in selected_ids and remaining.get(problem.difficulty, 0) > 0
+        ]
+        if not eligible:
+            break
+        eligible.sort(
+            key=lambda problem: (
+                -len(knowledge_ids(problem) - covered),
+                difficulty_order.get(problem.difficulty, len(difficulty_order)),
+                -problem.submit_count,
+                problem.slug,
+            )
+        )
+        chosen = eligible[0]
+        new_knowledge = knowledge_ids(chosen) - covered
+        if not new_knowledge:
+            break
+        selected.append(chosen)
+        selected_ids.add(chosen.id)
+        covered.update(new_knowledge)
+        remaining[chosen.difficulty] -= 1
+
+    # 第二阶段：按 5/7/3 配额稳定补齐。
+    for difficulty in DIAGNOSTIC_QUOTAS:
+        for problem in candidates:
+            if remaining[difficulty] <= 0:
+                break
+            if problem.id in selected_ids or problem.difficulty != difficulty:
+                continue
+            selected.append(problem)
+            selected_ids.add(problem.id)
+            remaining[difficulty] -= 1
+
+    # 某个难度内容不足时，用其他难度补齐总数，但仍保持确定性。
+    for problem in candidates:
+        if len(selected) >= DIAGNOSTIC_TOTAL:
+            break
+        if problem.id not in selected_ids:
+            selected.append(problem)
+            selected_ids.add(problem.id)
+
+    selected.sort(
+        key=lambda problem: (
+            difficulty_order.get(problem.difficulty, len(difficulty_order)),
+            -problem.submit_count,
+            problem.slug,
+        )
+    )
+    return selected[:DIAGNOSTIC_TOTAL]
+
+
+def _diagnostic_summary(problems: list[DiagnosticProblemRead]) -> dict[str, int | bool]:
+    knowledge_ids = {
+        knowledge_id for problem in problems for knowledge_id in problem.knowledge_point_ids
+    }
+    problem_count = len(problems)
+    knowledge_count = len(knowledge_ids)
+    return {
+        "diagnostic_problem_count": problem_count,
+        "diagnostic_knowledge_count": knowledge_count,
+        "diagnostic_ready": (
+            problem_count == DIAGNOSTIC_TOTAL
+            and knowledge_count >= DIAGNOSTIC_KNOWLEDGE_TARGET
+        ),
+    }
 
 
 async def _ensure_learning_profile(db: AsyncSession, user: User, rating: int | None) -> LearningProfile:

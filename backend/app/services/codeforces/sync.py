@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -117,7 +118,10 @@ async def sync_cf_tag_knowledge_mappings(db: AsyncSession) -> int:
             select(KnowledgePoint.id, KnowledgePoint.cf_tag).where(KnowledgePoint.cf_tag.is_not(None))
         )
     ).all()
-    tag_to_knowledge = {row.cf_tag: row.id for row in tag_rows if row.cf_tag}
+    tag_to_knowledge: dict[str, set[UUID]] = defaultdict(set)
+    for row in tag_rows:
+        if row.cf_tag:
+            tag_to_knowledge[row.cf_tag].add(row.id)
     if not tag_to_knowledge:
         return 0
 
@@ -130,10 +134,11 @@ async def sync_cf_tag_knowledge_mappings(db: AsyncSession) -> int:
         )
     ).all()
     pairs = {
-        (row.id, tag_to_knowledge[tag])
+        (row.id, knowledge_id)
         for row in problem_rows
         for tag in (row.cf_tags or [])
         if tag in tag_to_knowledge
+        for knowledge_id in tag_to_knowledge[tag]
     }
     if not pairs:
         return 0

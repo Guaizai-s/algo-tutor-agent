@@ -9,7 +9,8 @@
 - 只推荐已发布题目
 - 同一份每日任务内题目不得重复
 - 同一用户、同一自然日重复请求必须返回同一份计划（幂等）
-- 候选不足时返回已有任务 + missing_slots，不抛 500，不跨知识点补题
+- Rating 区间候选不足时按目标 Rating 距离在同知识点内降级，不跨知识点补题
+- 同知识点全部候选仍不足时返回已有任务 + missing_slots，不抛 500
 - 日期按 Asia/Shanghai 自然日
 """
 
@@ -45,7 +46,7 @@ from app.schemas.learning import (
     LectureRef,
     ProblemRef,
 )
-from app.services.recommendation import recommend_for_slots
+from app.services.recommendation import recommend_for_slots, recommend_problems_by_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,23 @@ async def get_or_create_today_task(
         raise ValueError("用户尚未生成学习路径，无法生成当日任务")
 
     # 推荐候选
-    template, application, challenge, _no_rating, _profile = await recommend_for_slots(db, user_id, target_kp.id)
+    template, application, challenge, _no_rating, profile = await recommend_for_slots(
+        db, user_id, target_kp.id
+    )
+    all_candidates = await recommend_problems_by_knowledge(
+        db,
+        user_id,
+        target_kp.id,
+        limit=100,
+        require_rating=False,
+    )
+    template = _with_rating_fallback(template, all_candidates, float(profile.target_rating_min))
+    application = _with_rating_fallback(
+        application,
+        all_candidates,
+        (float(profile.target_rating_min) + float(profile.target_rating_max)) / 2,
+    )
+    challenge = _with_rating_fallback(challenge, all_candidates, float(profile.target_rating_max))
 
     # CARD 讲义
     lecture_card = await _pick_card_lecture(db, target_kp.id)
@@ -184,6 +201,27 @@ async def get_or_create_today_task(
     task_read = await _build_task_read(db, task)
     preview = await _build_path_preview(db, user_id)
     return DailyTaskTodayResponse(task=task_read, path_preview=preview)
+
+
+def _with_rating_fallback(
+    primary: list[Problem],
+    all_candidates: list[Problem],
+    target_rating: float,
+) -> list[Problem]:
+    """保留严格区间候选在前，再按与目标 Rating 的距离追加同知识点候选。"""
+    result = list(primary)
+    seen = {problem.id for problem in result}
+    fallback = [problem for problem in all_candidates if problem.id not in seen]
+    fallback.sort(
+        key=lambda problem: (
+            problem.cf_rating is None,
+            abs(problem.cf_rating - target_rating) if problem.cf_rating is not None else float("inf"),
+            problem.cf_rating if problem.cf_rating is not None else float("inf"),
+            problem.title,
+        )
+    )
+    result.extend(fallback)
+    return result
 
 
 async def _add_problem_slot(
