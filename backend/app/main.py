@@ -14,6 +14,7 @@ from app.routers import (
     discussions,
     knowledge,
     learning,
+    onboarding,
     problems,
     progress,
     solutions,
@@ -61,6 +62,7 @@ app.include_router(learning.path_router, prefix=settings.API_V1_STR)
 app.include_router(learning.daily_router, prefix=settings.API_V1_STR)
 app.include_router(progress.router, prefix=settings.API_V1_STR)
 app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(onboarding.router, prefix=settings.API_V1_STR)
 app.include_router(discussions.router, prefix=settings.API_V1_STR)
 app.include_router(solutions.router, prefix=settings.API_V1_STR)
 app.include_router(wrongbook.router, prefix=settings.API_V1_STR)

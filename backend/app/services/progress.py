@@ -43,6 +43,7 @@ from app.models.learning import (
     UserProblemAC,
 )
 from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
+from app.models.wrongbook import WrongBookEntry
 from app.schemas.progress import (
     MasteryByCategory,
     ProgressOverviewResponse,
@@ -98,6 +99,18 @@ async def get_progress_overview(db: AsyncSession, user_id: UUID) -> ProgressOver
     # 10. CF Rating 曲线（基于 RatingHistory）
     rating_history = await _build_rating_history(db, user_id)
 
+    wrong_answers = (
+        await db.execute(select(func.count(WrongBookEntry.id)).where(WrongBookEntry.user_id == user_id))
+    ).scalar_one()
+    unresolved_wrong_answers = (
+        await db.execute(
+            select(func.count(WrongBookEntry.id)).where(
+                WrongBookEntry.user_id == user_id,
+                WrongBookEntry.resolved.is_(False),
+            )
+        )
+    ).scalar_one()
+
     return ProgressOverviewResponse(
         user_id=user_id,
         total_knowledge_points=total_kp,
@@ -110,6 +123,8 @@ async def get_progress_overview(db: AsyncSession, user_id: UUID) -> ProgressOver
         rating_history=rating_history,
         target_progress=target_progress,
         weak_knowledge_ids=weak_ids,
+        wrong_answers=wrong_answers,
+        unresolved_wrong_answers=unresolved_wrong_answers,
     )
 
 
@@ -235,8 +250,7 @@ async def _collect_weak_knowledge_ids(db: AsyncSession, user_id: UUID) -> list[U
             await db.execute(
                 select(UserKnowledgeState.knowledge_id).where(
                     UserKnowledgeState.user_id == user_id,
-                    UserKnowledgeState.mastery > 0.0,
-                    UserKnowledgeState.mastery < WEAK_MASTERY_THRESHOLD,
+                    UserKnowledgeState.is_weak.is_(True),
                 )
             )
         )

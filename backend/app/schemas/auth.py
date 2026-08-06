@@ -74,6 +74,60 @@ class UserRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProfileUpdateRequest(BaseModel):
+    """可由用户自行维护的个人档案字段。"""
+
+    username: str | None = Field(default=None, min_length=2, max_length=64)
+    avatar: str | None = Field(default=None, max_length=512)
+    school: str | None = Field(default=None, max_length=255)
+    atcoder_handle: str | None = Field(default=None, max_length=64)
+    target_medal: TargetMedal | None = None
+
+    @field_validator("username")
+    @classmethod
+    def normalize_profile_username(cls, value: str | None) -> str | None:
+        if value is None:
+            raise ValueError("username cannot be null")
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("username must contain at least 2 non-whitespace characters")
+        return normalized
+
+    @field_validator("avatar", "school", "atcoder_handle")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class CodeforcesBindRequest(BaseModel):
+    handle: str = Field(min_length=3, max_length=24)
+
+    @field_validator("handle")
+    @classmethod
+    def normalize_handle(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", normalized):
+            raise ValueError("invalid Codeforces handle format")
+        return normalized
+
+
+class CodeforcesAccountRead(BaseModel):
+    handle: str
+    current_rating: int | None
+    last_status_synced_at: datetime | None
+    last_rating_synced_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class CodeforcesBindResponse(BaseModel):
+    user: UserRead
+    account: CodeforcesAccountRead
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

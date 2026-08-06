@@ -69,15 +69,13 @@ class ProgressOverviewResponse(BaseSchema):
         default_factory=list,
         description="薄弱知识点 ID（0 < mastery < 0.5；mastery=0 未学不算薄弱）",
     )
+    wrong_answers: int = 0
+    unresolved_wrong_answers: int = 0
 
 
 class RecomputeMasteryRequest(BaseSchema):
-    """POST /api/v1/progress/recompute 请求。
+    """POST /api/v1/progress/recompute 请求；用户身份来自 JWT。"""
 
-    COMPAT: user_id 显式传入。
-    """
-
-    user_id: UUID
     knowledge_id: UUID | None = Field(
         default=None,
         description="指定知识点 ID；None 时重算用户所有知识点 mastery",

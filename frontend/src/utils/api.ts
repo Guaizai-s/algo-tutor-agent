@@ -5,9 +5,17 @@ import type {
   AttemptRequest,
   AttemptResponse,
   CodeExecutionResult,
+  CodeforcesAccount,
+  ColdStartResponse,
   DailyTaskTodayResponse,
+  DiagnosticProblem,
   LearningPathGenerateRequest,
   LearningPathRead,
+  ProfileUpdateRequest,
+  Progress,
+  User,
+  WrongBookListResponse,
+  WrongBookRecommendation,
 } from '../types'
 
 const api = axios.create({
@@ -43,7 +51,11 @@ export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   register: (email: string, username: string, password: string) =>
     api.post('/auth/register', { email, username, password }),
-  getProfile: () => api.get('/auth/me'),
+  getProfile: () => api.get<User>('/auth/me'),
+  updateProfile: (payload: ProfileUpdateRequest) => api.patch<User>('/auth/profile', payload),
+  getCodeforces: () => api.get<CodeforcesAccount | null>('/auth/codeforces'),
+  bindCodeforces: (handle: string) =>
+    api.post<{ user: User; account: CodeforcesAccount }>('/auth/codeforces/bind', { handle }),
 }
 
 export const knowledgeApi = {
@@ -75,10 +87,26 @@ export const agentApi = {
 }
 
 export const progressApi = {
-  getOverview: (userId: string) => api.get('/progress/overview', { params: { user_id: userId } }),
-  getWrongAnswers: () => api.get('/progress/wrong-answers'),
-  recomputeMastery: (userId: string, knowledgeId?: string) =>
-    api.post('/progress/recompute', { user_id: userId, knowledge_id: knowledgeId ?? null }),
+  getOverview: () => api.get<Progress>('/progress/overview'),
+  recomputeMastery: (knowledgeId?: string) =>
+    api.post('/progress/recompute', { knowledge_id: knowledgeId ?? null }),
+}
+
+export const wrongbookApi = {
+  list: (params?: { resolved?: boolean; page?: number; page_size?: number }) =>
+    api.get<WrongBookListResponse>('/wrongbook', { params }),
+  retry: (submissionId: string) => api.post(`/wrongbook/${submissionId}/retry`),
+  recommendations: (submissionId: string) =>
+    api.get<WrongBookRecommendation[]>(`/wrongbook/${submissionId}/recommendations`),
+}
+
+export const onboardingApi = {
+  getStatus: () => api.get<ColdStartResponse>('/onboarding/status'),
+  start: () => api.post<ColdStartResponse>('/onboarding/start'),
+  submitDiagnostic: (results: { problem_id: string; correct: boolean }[]) =>
+    api.post<ColdStartResponse>('/onboarding/diagnostic', { results }),
+  diagnosticProblems: (response: ColdStartResponse): DiagnosticProblem[] =>
+    response.diagnostic_problems,
 }
 
 export const reviewApi = {
@@ -105,20 +133,12 @@ export const discussionApi = {
 
 // ===== Task 10: Learning path & daily task =====
 
-/**
- * 开发期固定的 user_id（COMPAT: 认证落地后从 token 解析）。
- * 使用一个稳定 UUID，避免每次刷新生成新用户。
- * 该 UUID 仅用于本地开发调用 Task 10 API，不与真实用户绑定。
- */
-export const DEV_USER_ID = '00000000-0000-4000-8000-000000000001'
-
 export const learningApi = {
   /** 生成（或重新生成）学习路径。 */
   generatePath: (req: LearningPathGenerateRequest) =>
     api.post<LearningPathRead>('/learning-paths/generate', req),
   /** 获取当前 active 学习路径。 */
-  getCurrentPath: (userId: string) =>
-    api.get<LearningPathRead>('/learning-paths/current', { params: { user_id: userId } }),
+  getCurrentPath: () => api.get<LearningPathRead>('/learning-paths/current'),
   /** 记录一次做题结果，触发路径动态调整。 */
   recordAttempt: (req: AttemptRequest) =>
     api.post<AttemptResponse>('/learning-paths/attempts', req),
@@ -126,6 +146,5 @@ export const learningApi = {
 
 export const dailyTaskApi = {
   /** 获取今日任务（幂等）。 */
-  getToday: (userId: string) =>
-    api.get<DailyTaskTodayResponse>('/daily-tasks/today', { params: { user_id: userId } }),
+  getToday: () => api.get<DailyTaskTodayResponse>('/daily-tasks/today'),
 }

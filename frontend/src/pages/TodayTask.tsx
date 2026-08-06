@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Sparkles,
 } from 'lucide-react'
-import { dailyTaskApi, learningApi, DEV_USER_ID } from '../utils/api'
+import { dailyTaskApi, learningApi } from '../utils/api'
 import type { DailyTaskItemRead, DailyTaskTodayResponse } from '../types'
 
 const TodayTask: React.FC = () => {
@@ -27,7 +27,7 @@ const TodayTask: React.FC = () => {
     try {
       // 先确保存在路径，再拉今日任务
       try {
-        await learningApi.getCurrentPath(DEV_USER_ID)
+        await learningApi.getCurrentPath()
       } catch (err: unknown) {
         // 仅在明确收到 404（路径不存在）时才生成新路径；
         // 网络/500/鉴权错误不应该归档正常路径。
@@ -35,12 +35,9 @@ const TodayTask: React.FC = () => {
         if (status !== 404) {
           throw err
         }
-        await learningApi.generatePath({
-          user_id: DEV_USER_ID,
-          preview_count: 8,
-        })
+        await learningApi.generatePath({ preview_count: 8 })
       }
-      const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
+      const todayResp = await dailyTaskApi.getToday()
       setData(todayResp.data)
     } catch (err: unknown) {
       const msg =
@@ -61,11 +58,8 @@ const TodayTask: React.FC = () => {
     setRegenerating(true)
     setError(null)
     try {
-      await learningApi.generatePath({
-        user_id: DEV_USER_ID,
-        preview_count: 8,
-      })
-      const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
+      await learningApi.generatePath({ preview_count: 8 })
+      const todayResp = await dailyTaskApi.getToday()
       setData(todayResp.data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '重新生成学习路径失败'

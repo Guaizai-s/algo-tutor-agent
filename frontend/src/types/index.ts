@@ -12,6 +12,42 @@ export interface User {
   updated_at: string
 }
 
+export interface ProfileUpdateRequest {
+  username?: string | null
+  avatar?: string | null
+  school?: string | null
+  atcoder_handle?: string | null
+  target_medal?: 'bronze' | 'silver' | 'gold' | null
+}
+
+export interface CodeforcesAccount {
+  handle: string
+  current_rating: number | null
+  last_status_synced_at: string | null
+  last_rating_synced_at: string | null
+}
+
+export interface DiagnosticProblem {
+  id: string
+  title: string
+  difficulty: Difficulty
+  cf_rating: number | null
+  knowledge_point_ids: string[]
+}
+
+export interface ColdStartResponse {
+  completed: boolean
+  mode: 'not_started' | 'cf_history' | 'diagnostic_required' | 'diagnostic'
+  cf_handle: string | null
+  current_rating: number | null
+  submission_count: number
+  mapped_knowledge_points: number
+  learning_path_id: string | null
+  diagnostic_problems: DiagnosticProblem[]
+  message: string
+  sync_error: string | null
+}
+
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
 export interface KnowledgePoint {
@@ -195,6 +231,40 @@ export interface Progress {
   target_progress: TargetProgress | null
   /** 薄弱知识点 ID 列表（0 < mastery < 0.5；mastery=0 未学不算薄弱） */
   weak_knowledge_ids: string[]
+  wrong_answers: number
+  unresolved_wrong_answers: number
+}
+
+export interface WrongBookItem {
+  submission_id: string
+  problem_id: string | null
+  problem_title: string | null
+  cf_contest_id: number | null
+  cf_index: string | null
+  verdict: string
+  knowledge_point_names: string[]
+  retry_count: number
+  resolved: boolean
+  submitted_at: string
+  last_retry_at: string | null
+}
+
+export interface WrongBookListResponse {
+  items: WrongBookItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface WrongBookRecommendation {
+  problem_id: string
+  title: string
+  difficulty: string
+  cf_rating: number | null
+  knowledge_point_names: string[]
+  ac_count: number
+  submit_count: number
 }
 
 export interface AuthResponse {
@@ -313,12 +383,10 @@ export interface LearningPathRead {
 }
 
 export interface LearningPathGenerateRequest {
-  user_id: string
   preview_count?: number
 }
 
 export interface AttemptRequest {
-  user_id: string
   knowledge_id: string
   problem_id: string
   verdict: string

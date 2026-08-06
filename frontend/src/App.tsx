@@ -16,6 +16,7 @@ import Notifications from './pages/Notifications'
 import Discussions from './pages/Discussions'
 import SolutionDetail from './pages/SolutionDetail'
 import TodayTask from './pages/TodayTask'
+import Profile from './pages/Profile'
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="today" element={<TodayTask />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="knowledge" element={<KnowledgeTree />} />
           <Route path="knowledge/graph" element={<Navigate to="/knowledge" replace />} />
           <Route path="knowledge/:id" element={<KnowledgeDetail />} />

@@ -6,18 +6,18 @@ API:
 - POST /api/v1/learning-paths/attempts
 - GET  /api/v1/daily-tasks/today
 
-COMPAT: user_id 显式从请求体/查询参数传入，等认证落地后改为 token 解析。
+所有用户范围均由 JWT 当前用户解析，不接受外部 user_id。
 """
 
 from __future__ import annotations
 
 import logging
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import CurrentUser
 from app.schemas.learning import (
     AttemptRequest,
     AttemptResponse,
@@ -44,11 +44,12 @@ daily_router = APIRouter(prefix="/daily-tasks", tags=["daily-task"])
 @path_router.post("/generate", response_model=LearningPathRead)
 async def api_generate_learning_path(
     req: LearningPathGenerateRequest,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> LearningPathRead:
     """生成（或重新生成）用户学习路径。"""
     try:
-        result = await generate_learning_path(db, req.user_id, req.preview_count)
+        result = await generate_learning_path(db, current_user.id, req.preview_count)
     except CycleDetectedError as exc:
         raise HTTPException(
             status_code=422,
@@ -63,11 +64,11 @@ async def api_generate_learning_path(
 
 @path_router.get("/current", response_model=LearningPathRead)
 async def api_get_current_learning_path(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> LearningPathRead:
     """获取用户当前 active 学习路径。"""
-    result = await get_current_learning_path(db, user_id)
+    result = await get_current_learning_path(db, current_user.id)
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -79,12 +80,13 @@ async def api_get_current_learning_path(
 @path_router.post("/attempts", response_model=AttemptResponse)
 async def api_record_attempt(
     req: AttemptRequest,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> AttemptResponse:
     """记录一次做题结果，触发路径动态调整。"""
     return await record_attempt(
         db,
-        user_id=req.user_id,
+        user_id=current_user.id,
         knowledge_id=req.knowledge_id,
         problem_id=req.problem_id,
         verdict=req.verdict,
@@ -94,11 +96,11 @@ async def api_record_attempt(
 
 @daily_router.get("/today", response_model=DailyTaskTodayResponse)
 async def api_get_today_task(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> DailyTaskTodayResponse:
     """获取今日任务（幂等：同日重复请求返回同一份计划）。"""
     try:
-        return await get_or_create_today_task(db, user_id)
+        return await get_or_create_today_task(db, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

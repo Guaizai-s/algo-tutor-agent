@@ -554,12 +554,13 @@ async def test_missing_slots_when_no_problems(db_session: AsyncSession, kp_chain
 # ===== 14. API 集成测试 =====
 
 
-async def test_api_generate_path(client, db_session: AsyncSession, kp_chain: dict[str, UUID]):
+async def test_api_generate_path(client, db_session: AsyncSession, kp_chain: dict[str, UUID], auth_user):
     """API: POST /api/v1/learning-paths/generate。"""
-    user_id = uuid4()
+    user_id = auth_user["user"].id
     resp = await client.post(
         "/api/v1/learning-paths/generate",
-        json={"user_id": str(user_id), "preview_count": 5},
+        json={"preview_count": 5},
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -574,20 +575,21 @@ async def test_api_get_today_task(
     kp_chain: dict[str, UUID],
     problems_with_rating: dict[str, UUID],
     card_lecture: UUID,
+    auth_user,
 ):
     """API: GET /api/v1/daily-tasks/today。"""
-    user_id = uuid4()
     # 先生成路径
     gen_resp = await client.post(
         "/api/v1/learning-paths/generate",
-        json={"user_id": str(user_id), "preview_count": 5},
+        json={"preview_count": 5},
+        headers=auth_user["headers"],
     )
     assert gen_resp.status_code == 200
 
     # 获取今日任务
     resp = await client.get(
         "/api/v1/daily-tasks/today",
-        params={"user_id": str(user_id)},
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -596,12 +598,11 @@ async def test_api_get_today_task(
     assert len(data["task"]["items"]) == 5
 
 
-async def test_api_today_task_404_without_path(client):
+async def test_api_today_task_404_without_path(client, auth_user):
     """API: 无路径时 GET /api/v1/daily-tasks/today 返回 404。"""
-    user_id = uuid4()
     resp = await client.get(
         "/api/v1/daily-tasks/today",
-        params={"user_id": str(user_id)},
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 404
 

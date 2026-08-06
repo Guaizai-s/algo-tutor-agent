@@ -52,12 +52,8 @@ class LectureRef(BaseSchema):
 
 
 class LearningPathGenerateRequest(BaseSchema):
-    """生成学习路径请求。
+    """生成当前 JWT 用户的学习路径。"""
 
-    COMPAT: user_id 显式传入，等认证落地后改为从 token 解析。
-    """
-
-    user_id: UUID
     preview_count: int = Field(default=8, ge=5, le=10)
 
 
@@ -90,7 +86,6 @@ class AttemptRequest(BaseSchema):
     服务端会忽略它（deprecated）。
     """
 
-    user_id: UUID
     knowledge_id: UUID
     problem_id: UUID
     verdict: str = Field(..., description="AC / WA / TLE / RE 等")

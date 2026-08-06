@@ -43,33 +43,29 @@ async def list_wrongbook(db: AsyncSession, user_id: UUID, params: WrongBookListP
         subq = select(ProblemKnowledgePoint.problem_id).where(ProblemKnowledgePoint.knowledge_id == params.knowledge_id)
         filters.append(Submission.problem_id.in_(subq))
 
-    count_stmt = select(func.count(Submission.id)).where(*filters)
+    joined = Submission.__table__.outerjoin(
+        WrongBookEntry.__table__,
+        (WrongBookEntry.submission_id == Submission.id) & (WrongBookEntry.user_id == user_id),
+    )
+    if params.resolved is not None:
+        resolved_value = func.coalesce(WrongBookEntry.resolved, False)
+        filters.append(resolved_value.is_(params.resolved))
+
+    count_stmt = select(func.count(Submission.id)).select_from(joined).where(*filters)
     total = (await db.execute(count_stmt)).scalar_one()
 
     stmt = (
-        select(Submission)
+        select(Submission, WrongBookEntry)
+        .select_from(joined)
         .where(*filters)
         .order_by(Submission.submitted_at.desc())
         .offset((params.page - 1) * params.page_size)
         .limit(params.page_size)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-
-    # 批量加载 WrongBookEntry
-    sub_ids = [sub.id for sub in rows]
-    wb_rows = (
-        (await db.execute(select(WrongBookEntry).where(WrongBookEntry.submission_id.in_(sub_ids)))).scalars().all()
-    )
-    wb_map: dict[UUID, WrongBookEntry] = {wb.submission_id: wb for wb in wb_rows}
+    rows = (await db.execute(stmt)).all()
 
     items: list[WrongBookItem] = []
-    for sub in rows:
-        wb = wb_map.get(sub.id)
-        if params.resolved is not None:
-            # 筛选：无 WrongBookEntry 记录视为未解决
-            is_resolved = wb.resolved if wb else False
-            if params.resolved != is_resolved:
-                continue
+    for sub, wb in rows:
         item = await _build_wrongbook_item(db, sub, wb)
         items.append(item)
 
@@ -176,7 +172,9 @@ async def get_recommendations(
     # 获取原题目的知识点
     kp_rows = (
         await db.execute(
-            select(KnowledgePoint.id, KnowledgePoint.name).where(ProblemKnowledgePoint.problem_id == sub.problem_id)
+            select(KnowledgePoint.id, KnowledgePoint.name)
+            .join(ProblemKnowledgePoint, ProblemKnowledgePoint.knowledge_id == KnowledgePoint.id)
+            .where(ProblemKnowledgePoint.problem_id == sub.problem_id)
         )
     ).all()
     if not kp_rows:
@@ -192,11 +190,15 @@ async def get_recommendations(
     )
 
     # 查找同类知识点的已发布题目，排除已 AC 题目和原题，按 cf_rating 升序
+    candidate_ids = (
+        select(ProblemKnowledgePoint.problem_id)
+        .where(ProblemKnowledgePoint.knowledge_id.in_(kp_ids))
+        .distinct()
+    )
     stmt = (
         select(Problem)
-        .join(ProblemKnowledgePoint, ProblemKnowledgePoint.problem_id == Problem.id)
         .where(
-            ProblemKnowledgePoint.knowledge_id.in_(kp_ids),
+            Problem.id.in_(candidate_ids),
             Problem.status == ProblemStatus.PUBLISHED,
             Problem.id != sub.problem_id,
             ~Problem.id.in_(ac_ids) if ac_ids else True,
@@ -208,7 +210,13 @@ async def get_recommendations(
 
     recommendations: list[WrongBookRecommendation] = []
     for p in problems:
-        pkp_rows = (await db.execute(select(KnowledgePoint.name).where(ProblemKnowledgePoint.problem_id == p.id))).all()
+        pkp_rows = (
+            await db.execute(
+                select(KnowledgePoint.name)
+                .join(ProblemKnowledgePoint, ProblemKnowledgePoint.knowledge_id == KnowledgePoint.id)
+                .where(ProblemKnowledgePoint.problem_id == p.id)
+            )
+        ).all()
         rec = WrongBookRecommendation(
             problem_id=p.id,
             title=p.title,
@@ -234,7 +242,11 @@ async def _build_wrongbook_item(db: AsyncSession, sub: Submission, wb: WrongBook
             problem_title = problem.title
 
         kp_rows = (
-            await db.execute(select(KnowledgePoint.name).where(ProblemKnowledgePoint.problem_id == sub.problem_id))
+            await db.execute(
+                select(KnowledgePoint.name)
+                .join(ProblemKnowledgePoint, ProblemKnowledgePoint.knowledge_id == KnowledgePoint.id)
+                .where(ProblemKnowledgePoint.problem_id == sub.problem_id)
+            )
         ).all()
         kp_names = [row.name for row in kp_rows]
 

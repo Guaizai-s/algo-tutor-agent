@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react'
-import { progressApi, DEV_USER_ID } from '../utils/api'
+import { progressApi } from '../utils/api'
 import type { Progress } from '../types'
 
 const Dashboard: React.FC = () => {
@@ -20,7 +20,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview(DEV_USER_ID)
+      .getOverview()
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
@@ -64,7 +64,7 @@ const Dashboard: React.FC = () => {
         },
         {
           label: '错题本',
-          value: '—',
+          value: `${progress.unresolved_wrong_answers}`,
           icon: BookX,
           color: 'bg-red-100 text-red-600',
           link: '/wrong-answers',

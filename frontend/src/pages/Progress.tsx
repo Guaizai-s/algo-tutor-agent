@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { BarChart3, Trophy, Target, TrendingUp, Calendar, AlertCircle, Loader2 } from 'lucide-react'
-import { progressApi, DEV_USER_ID } from '../utils/api'
+import { progressApi } from '../utils/api'
 import type { Progress } from '../types'
 
 /**
@@ -25,7 +25,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview(DEV_USER_ID)
+      .getOverview()
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
