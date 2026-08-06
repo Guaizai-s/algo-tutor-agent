@@ -66,6 +66,7 @@ backend/app/main.py                 ← 谁新增 router 谁改，PR 协调
 3. **只改自己领地的文件**，不要跨区修改
 4. **完成后**：`ruff check` / `npm run lint` → 提交 → 提 PR
 5. **PR 合入后**：通知其他人 `git pull`
+6. **每个功能完成后必须提交**：每完成一个独立功能点就 commit 一次，不要攒多个功能一起提交。保持 commit 粒度小、可追溯。
 
 ### API 契约 = Schemas 目录
 - 所有 API 的 Request/Response 类型定义在 `backend/app/schemas/`

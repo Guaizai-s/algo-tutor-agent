@@ -1,4 +1,6 @@
 from app.models.base import TimestampMixin, UUIDMixin
+from app.models.codeforces import CodeforcesAccount, RatingHistory, Submission
+from app.models.discussion import Discussion, DiscussionCategory, DiscussionComment
 from app.models.knowledge import (
     CodeTemplate,
     KnowledgePoint,
@@ -33,6 +35,7 @@ from app.models.problem import (
     SolutionComment,
 )
 from app.models.user import TargetMedal, User, UserRole
+from app.models.wrongbook import WrongBookEntry
 
 __all__ = [
     "TimestampMixin",
@@ -65,8 +68,18 @@ __all__ = [
     "MASTERY_THRESHOLD",
     "WEAK_MASTERY_THRESHOLD",
     "CONSECUTIVE_WA_THRESHOLD",
+    # Task 15 讨论区
+    "Discussion",
+    "DiscussionCategory",
+    "DiscussionComment",
     # Task 2 用户认证
     "User",
     "UserRole",
     "TargetMedal",
+    # Task 12 错题本
+    "WrongBookEntry",
+    # Task 8 Codeforces
+    "CodeforcesAccount",
+    "Submission",
+    "RatingHistory",
 ]

@@ -238,9 +238,9 @@ async def run() -> int:
                 assert overview.streak_days >= 1, f"streak_days < 1: {overview.streak_days}"
                 # rating_history 非空
                 assert len(overview.rating_history) == 1, f"rating_history != 1: {len(overview.rating_history)}"
-                assert overview.rating_history[0].rating == 1500, (
-                    f"rating[0] != 1500: {overview.rating_history[0].rating}"
-                )
+                assert (
+                    overview.rating_history[0].rating == 1500
+                ), f"rating[0] != 1500: {overview.rating_history[0].rating}"
                 logger.info(
                     "progress overview OK: streak_days=%d rating_history=%d solved_problems=%d",
                     overview.streak_days,

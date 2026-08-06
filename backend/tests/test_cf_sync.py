@@ -691,9 +691,9 @@ async def test_user_status_incremental_truncated_does_not_advance_cursor(
     assert result["reached_cursor"] is False
     assert result["new_submissions"] == 3000
     # 关键：游标未推进！仍是 1000
-    assert account.last_submission_id == 1000, (
-        f"cursor must NOT advance when truncated, got {account.last_submission_id}"
-    )
+    assert (
+        account.last_submission_id == 1000
+    ), f"cursor must NOT advance when truncated, got {account.last_submission_id}"
 
     # 已拉取的 3000 条确实写入 DB
     subs = (await db_session.execute(select(Submission).where(Submission.user_id == user_id))).scalars().all()
