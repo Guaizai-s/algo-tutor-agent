@@ -18,7 +18,13 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { progressApi, learningApi, notificationApi, DEV_USER_ID } from '../utils/api'
-import type { MasteryByCategory, Progress, LearningPathRead, ActivityResponse, RecommendationResponse } from '../types'
+import type {
+  MasteryByCategory,
+  Progress,
+  LearningPathRead,
+  ActivityResponse,
+  RecommendationResponse,
+} from '../types'
 
 type ViewMode = 'chart' | 'list'
 
@@ -292,7 +298,10 @@ const ProgressPage: React.FC = () => {
                 <div key={item.knowledge_id}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-700 truncate flex-1" title={item.knowledge_name}>
+                    <span
+                      className="text-xs text-gray-700 truncate flex-1"
+                      title={item.knowledge_name}
+                    >
                       {item.knowledge_name}
                     </span>
                     <span className="text-[10px] font-medium text-red-500">{item.mastery}%</span>
@@ -341,7 +350,10 @@ const ProgressPage: React.FC = () => {
             <div className="mb-3">
               <p className="text-2xl font-bold text-purple-600">
                 {progress.review_status.due_count}
-                <span className="text-sm font-normal text-gray-400"> / {progress.review_status.total_records}</span>
+                <span className="text-sm font-normal text-gray-400">
+                  {' '}
+                  / {progress.review_status.total_records}
+                </span>
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 已完成 {progress.review_status.completed} 个知识点复习
@@ -368,9 +380,7 @@ const ProgressPage: React.FC = () => {
             <p className="text-sm text-gray-400">暂无学习路径</p>
           ) : (
             <div className="mb-3">
-              <p className="text-2xl font-bold text-blue-600">
-                {pathProgress.percent}%
-              </p>
+              <p className="text-2xl font-bold text-blue-600">{pathProgress.percent}%</p>
               <p className="text-xs text-gray-500 mt-1">
                 {pathProgress.currentName
                   ? `当前：${pathProgress.currentName}`
@@ -430,7 +440,10 @@ const ProgressPage: React.FC = () => {
           <div className="space-y-2">
             {chartData.map((item) => (
               <div key={item.name} className="flex items-center gap-3">
-                <span className="text-sm text-gray-700 w-20 flex-shrink-0 truncate" title={item.name}>
+                <span
+                  className="text-sm text-gray-700 w-20 flex-shrink-0 truncate"
+                  title={item.name}
+                >
                   {item.name}
                 </span>
                 <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
@@ -439,7 +452,9 @@ const ProgressPage: React.FC = () => {
                     style={{ width: `${Math.max(item.value, 3)}%` }}
                   />
                 </div>
-                <span className={`text-sm font-medium w-10 text-right tabular-nums ${masteryTextColor(item.value)}`}>
+                <span
+                  className={`text-sm font-medium w-10 text-right tabular-nums ${masteryTextColor(item.value)}`}
+                >
                   {item.value}%
                 </span>
               </div>
@@ -492,17 +507,26 @@ const ProgressPage: React.FC = () => {
                         const isWeak = weakSet.has(item.knowledge_id)
                         return (
                           <div key={item.knowledge_id} className="flex items-center gap-2">
-                            <span className="flex items-center gap-1 text-xs text-gray-600 w-24 flex-shrink-0 truncate" title={item.name}>
-                              {isWeak && <span className="text-red-400 text-[8px] leading-none">●</span>}
+                            <span
+                              className="flex items-center gap-1 text-xs text-gray-600 w-24 flex-shrink-0 truncate"
+                              title={item.name}
+                            >
+                              {isWeak && (
+                                <span className="text-red-400 text-[8px] leading-none">●</span>
+                              )}
                               {item.name}
                             </span>
-                            <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${isWeak ? 'ring-1 ring-red-200 bg-red-50' : 'bg-gray-100'}`}>
+                            <div
+                              className={`flex-1 h-1.5 rounded-full overflow-hidden ${isWeak ? 'ring-1 ring-red-200 bg-red-50' : 'bg-gray-100'}`}
+                            >
                               <div
                                 className={`h-full rounded-full transition-all ${masteryColor(item.value)}`}
                                 style={{ width: `${Math.max(item.value, 3)}%` }}
                               />
                             </div>
-                            <span className={`text-xs font-medium w-10 text-right tabular-nums ${masteryTextColor(item.value)}`}>
+                            <span
+                              className={`text-xs font-medium w-10 text-right tabular-nums ${masteryTextColor(item.value)}`}
+                            >
                               {item.value}%
                             </span>
                           </div>
@@ -566,17 +590,17 @@ const ProgressPage: React.FC = () => {
                   <span className="text-xs text-gray-500 tabular-nums">{day.count}</span>
                   <div
                     className={`w-full rounded-t transition-all ${
-                      day.count > 0
-                        ? isToday
-                          ? 'bg-green-500'
-                          : 'bg-green-300'
-                        : 'bg-gray-100'
+                      day.count > 0 ? (isToday ? 'bg-green-500' : 'bg-green-300') : 'bg-gray-100'
                     }`}
                     style={{ height: `${height}%` }}
                     title={`${day.date}: ${day.count} 题`}
                   />
-                  <span className={`text-[10px] ${isToday ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
-                    {new Date(day.date).toLocaleDateString('zh-CN', { weekday: 'short' }).replace('周', '')}
+                  <span
+                    className={`text-[10px] ${isToday ? 'text-green-600 font-medium' : 'text-gray-400'}`}
+                  >
+                    {new Date(day.date)
+                      .toLocaleDateString('zh-CN', { weekday: 'short' })
+                      .replace('周', '')}
                   </span>
                 </div>
               )

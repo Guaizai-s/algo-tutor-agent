@@ -257,7 +257,8 @@ const KnowledgeDetail: React.FC = () => {
   const [copiedTpl, setCopiedTpl] = useState<string | null>(null)
 
   // UUID 格式校验
-  const isUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 
   useEffect(() => {
     if (!id) return
@@ -294,7 +295,8 @@ const KnowledgeDetail: React.FC = () => {
       loadByKpId(id)
     } else {
       // id 不是 UUID，尝试按 slug 查找
-      knowledgeApi.getTree()
+      knowledgeApi
+        .getTree()
         .then((resp) => {
           if (cancelled) return
           const items = resp.data as KnowledgePoint[]
@@ -449,7 +451,11 @@ const KnowledgeDetail: React.FC = () => {
                     },
                     code({ children, className, ...props }) {
                       if (!className) {
-                        return <code className={className} {...props}>{children}</code>
+                        return (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        )
                       }
                       const lang = className.replace('language-', '')
                       const code = String(children).replace(/\n$/, '')
@@ -467,7 +473,8 @@ const KnowledgeDetail: React.FC = () => {
                         const match = text.match(/^\[!(\w+)\]\s*(.*)/)
                         if (match) {
                           const type = match[1]
-                          const title = match[2] || ADMONITION_META[type.toLowerCase()]?.defaultTitle || type
+                          const title =
+                            match[2] || ADMONITION_META[type.toLowerCase()]?.defaultTitle || type
                           return (
                             <CalloutBlock type={type} title={title}>
                               {childrenArr.slice(firstIdx + 1)}

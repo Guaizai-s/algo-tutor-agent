@@ -50,7 +50,10 @@ const Layout: React.FC = () => {
       >
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           {sidebarOpen && (
-            <Link to="/dashboard" className="text-xl font-bold text-blue-600 hover:text-blue-700 transition-colors">
+            <Link
+              to="/dashboard"
+              className="text-xl font-bold text-blue-600 hover:text-blue-700 transition-colors"
+            >
               算法教练
             </Link>
           )}

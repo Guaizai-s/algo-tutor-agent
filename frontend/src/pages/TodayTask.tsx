@@ -13,7 +13,11 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { dailyTaskApi, learningApi, DEV_USER_ID } from '../utils/api'
-import type { DailyTaskItemRead, DailyTaskItemUpdateResponse, DailyTaskTodayResponse } from '../types'
+import type {
+  DailyTaskItemRead,
+  DailyTaskItemUpdateResponse,
+  DailyTaskTodayResponse,
+} from '../types'
 
 const TodayTask: React.FC = () => {
   const [data, setData] = useState<DailyTaskTodayResponse | null>(null)
@@ -72,9 +76,7 @@ const TodayTask: React.FC = () => {
           ...prev,
           task: {
             ...prev.task,
-            items: prev.task.items.map((i) =>
-              i.id === item.id ? result.item : i
-            ),
+            items: prev.task.items.map((i) => (i.id === item.id ? result.item : i)),
           },
         }
       })
@@ -197,9 +199,7 @@ const TodayTask: React.FC = () => {
           <CheckCircle2 className="text-green-500 flex-shrink-0" size={28} />
           <div>
             <p className="font-semibold text-green-800">今日任务全部完成!</p>
-            <p className="text-sm text-green-600 mt-1">
-              已自动打卡，明天继续加油
-            </p>
+            <p className="text-sm text-green-600 mt-1">已自动打卡，明天继续加油</p>
           </div>
         </div>
       )}
@@ -280,7 +280,10 @@ const TodayTask: React.FC = () => {
   )
 }
 
-const TaskItemCard: React.FC<{ item: DailyTaskItemRead; onToggle: () => void }> = ({ item, onToggle }) => {
+const TaskItemCard: React.FC<{ item: DailyTaskItemRead; onToggle: () => void }> = ({
+  item,
+  onToggle,
+}) => {
   const isLecture = item.item_type === 'lecture_card'
   const isDone = item.status === 'done'
   const isMissing = !item.lecture && !item.problem
@@ -324,7 +327,9 @@ const TaskItemCard: React.FC<{ item: DailyTaskItemRead; onToggle: () => void }> 
               </span>
             )}
           </div>
-          <p className={`font-medium mt-1 truncate ${isDone ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+          <p
+            className={`font-medium mt-1 truncate ${isDone ? 'text-gray-400 line-through' : 'text-gray-900'}`}
+          >
             {title}
           </p>
           {item.missing_reason && (
@@ -341,7 +346,10 @@ const TaskItemCard: React.FC<{ item: DailyTaskItemRead; onToggle: () => void }> 
           title={isDone ? '标记为未完成' : '标记为已完成'}
         >
           {isDone ? (
-            <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={22} />
+            <CheckCircle2
+              className="text-green-500 hover:text-green-600 transition-colors"
+              size={22}
+            />
           ) : (
             <Circle className="text-gray-300 hover:text-gray-400 transition-colors" size={22} />
           )}

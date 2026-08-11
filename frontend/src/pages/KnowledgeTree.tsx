@@ -34,7 +34,10 @@ const CATEGORY_META: Record<string, { color: string; icon: LucideIcon }> = {
 }
 
 // 状态 → 视觉配置
-const STATUS_STYLE: Record<RoadmapNodeStatus, { bg: string; border: string; text: string; icon: React.ReactNode }> = {
+const STATUS_STYLE: Record<
+  RoadmapNodeStatus,
+  { bg: string; border: string; text: string; icon: React.ReactNode }
+> = {
   done: {
     bg: 'bg-green-50/60',
     border: 'border-l-green-400',
@@ -82,7 +85,11 @@ const isOtherCategory = (name: string) => name.startsWith('其他')
 const countLeaves = (n: KnowledgeNode): number =>
   n.children.length === 0 ? 1 : n.children.reduce((s, c) => s + countLeaves(c), 0)
 const countDoneLeaves = (n: KnowledgeNode): number =>
-  n.children.length === 0 ? (n.status === 'done' ? 1 : 0) : n.children.reduce((s, c) => s + countDoneLeaves(c), 0)
+  n.children.length === 0
+    ? n.status === 'done'
+      ? 1
+      : 0
+    : n.children.reduce((s, c) => s + countDoneLeaves(c), 0)
 
 const KnowledgeTree: React.FC = () => {
   const [tree, setTree] = useState<KnowledgeNode[]>([])
@@ -107,9 +114,14 @@ const KnowledgeTree: React.FC = () => {
       ])
 
       const kpItems = treeResp.data as Array<{
-        id: string; name: string; slug: string; parent_id: string | null
-        difficulty: string; order: number
-        lecture_count?: number; template_count?: number
+        id: string
+        name: string
+        slug: string
+        parent_id: string | null
+        difficulty: string
+        order: number
+        lecture_count?: number
+        template_count?: number
       }>
 
       // 构建 roadmap 状态索引
@@ -298,10 +310,14 @@ const KnowledgeTree: React.FC = () => {
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
-      case 'easy': return 'bg-green-500'
-      case 'medium': return 'bg-yellow-500'
-      case 'hard': return 'bg-red-500'
-      default: return 'bg-gray-400'
+      case 'easy':
+        return 'bg-green-500'
+      case 'medium':
+        return 'bg-yellow-500'
+      case 'hard':
+        return 'bg-red-500'
+      default:
+        return 'bg-gray-400'
     }
   }
 
@@ -352,7 +368,9 @@ const KnowledgeTree: React.FC = () => {
           ) : node.status !== 'unlocked' ? (
             <span className="flex-shrink-0">{style.icon}</span>
           ) : (
-            <span className={`flex-shrink-0 w-2 h-2 rounded-full ${getDifficultyColor(node.difficulty)}`} />
+            <span
+              className={`flex-shrink-0 w-2 h-2 rounded-full ${getDifficultyColor(node.difficulty)}`}
+            />
           )}
 
           {/* 名称 */}
@@ -384,9 +402,14 @@ const KnowledgeTree: React.FC = () => {
           {isRoot && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${rootPct}%` }} />
+                <div
+                  className="h-full bg-green-500 rounded-full transition-all"
+                  style={{ width: `${rootPct}%` }}
+                />
               </div>
-              <span className="text-xs text-gray-500 tabular-nums">{rootDone}/{rootTotal}</span>
+              <span className="text-xs text-gray-500 tabular-nums">
+                {rootDone}/{rootTotal}
+              </span>
             </div>
           )}
 
@@ -397,7 +420,9 @@ const KnowledgeTree: React.FC = () => {
 
           {/* 状态标签 */}
           {node.status !== 'unlocked' && !isRoot && (
-            <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${style.bg} ${style.text}`}>
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${style.bg} ${style.text}`}
+            >
               {STATUS_LABEL[node.status]}
             </span>
           )}
@@ -568,7 +593,10 @@ const KnowledgeTree: React.FC = () => {
           {/* 搜索栏 + 状态过滤 */}
           <div className="bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
               <input
                 type="text"
                 value={searchQuery}
@@ -586,13 +614,15 @@ const KnowledgeTree: React.FC = () => {
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              {([
-                { key: 'all', label: '全部' },
-                { key: 'active', label: '学习中' },
-                { key: 'unlocked', label: '可学习' },
-                { key: 'done', label: '已掌握' },
-                { key: 'none', label: '未解锁' },
-              ] as const).map((tab) => (
+              {(
+                [
+                  { key: 'all', label: '全部' },
+                  { key: 'active', label: '学习中' },
+                  { key: 'unlocked', label: '可学习' },
+                  { key: 'done', label: '已掌握' },
+                  { key: 'none', label: '未解锁' },
+                ] as const
+              ).map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setStatusFilter(tab.key)}

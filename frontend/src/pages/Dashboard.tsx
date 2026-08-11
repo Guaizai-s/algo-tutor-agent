@@ -144,7 +144,8 @@ const Dashboard: React.FC = () => {
           <div className="flex-1">
             <p className="font-medium text-orange-900">尚未绑定 Codeforces 账号</p>
             <p className="text-sm text-orange-700 mt-0.5">
-              题库里的题目来自 Codeforces。绑定 CF 账号后，系统才能自动同步你的提交结果与 AC 状态，否则题库无法记录你的练习进度。
+              题库里的题目来自 Codeforces。绑定 CF 账号后，系统才能自动同步你的提交结果与 AC
+              状态，否则题库无法记录你的练习进度。
             </p>
           </div>
           <Link
@@ -285,7 +286,10 @@ const Dashboard: React.FC = () => {
                 <div key={item.knowledge_id}>
                   <div className="flex items-center gap-2 mb-1.5">
                     <Zap size={14} className="text-amber-500 flex-shrink-0" />
-                    <span className="text-sm font-medium text-gray-800 truncate flex-1" title={item.knowledge_name}>
+                    <span
+                      className="text-sm font-medium text-gray-800 truncate flex-1"
+                      title={item.knowledge_name}
+                    >
                       {item.knowledge_name}
                     </span>
                     <span className="text-xs font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded">

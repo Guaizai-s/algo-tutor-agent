@@ -74,7 +74,9 @@ const Profile: React.FC = () => {
     <div className="max-w-3xl mx-auto space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">个人档案</h1>
-        <p className="text-gray-600 mt-2">绑定 Codeforces 账号后，系统每 5 分钟自动同步你的提交记录与 AC 状态</p>
+        <p className="text-gray-600 mt-2">
+          绑定 Codeforces 账号后，系统每 5 分钟自动同步你的提交记录与 AC 状态
+        </p>
       </div>
 
       {/* ===== CF 绑定卡片 ===== */}
@@ -109,7 +111,9 @@ const Profile: React.FC = () => {
                 {cfResult && (
                   <p className="text-sm text-gray-600 mt-1">
                     {cfResult.rank ? `段位：${cfResult.rank}，` : ''}
-                    {cfResult.current_rating != null ? `当前 Rating：${cfResult.current_rating}` : '暂无 Rating'}
+                    {cfResult.current_rating != null
+                      ? `当前 Rating：${cfResult.current_rating}`
+                      : '暂无 Rating'}
                     {cfResult.max_rating != null ? `（最高 ${cfResult.max_rating}）` : ''}
                   </p>
                 )}
@@ -147,7 +151,8 @@ const Profile: React.FC = () => {
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 flex items-start gap-2">
               <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
               <span>
-                未绑定 CF 账号。绑定后才能汇集你在 Codeforces 上的提交记录与 AC 状态，否则题库只能空转。
+                未绑定 CF 账号。绑定后才能汇集你在 Codeforces 上的提交记录与 AC
+                状态，否则题库只能空转。
               </span>
             </div>
             <div className="flex gap-2">

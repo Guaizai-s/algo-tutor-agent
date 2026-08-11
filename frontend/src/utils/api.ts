@@ -102,8 +102,10 @@ export const reviewApi = {
 
 export const notificationApi = {
   list: () => api.get('/notifications', { params: { user_id: DEV_USER_ID } }),
-  markAsRead: (id: string) => api.post(`/notifications/${id}/read`, null, { params: { user_id: DEV_USER_ID } }),
-  markAllAsRead: () => api.post('/notifications/read-all', null, { params: { user_id: DEV_USER_ID } }),
+  markAsRead: (id: string) =>
+    api.post(`/notifications/${id}/read`, null, { params: { user_id: DEV_USER_ID } }),
+  markAllAsRead: () =>
+    api.post('/notifications/read-all', null, { params: { user_id: DEV_USER_ID } }),
   getRecommendations: (userId: string) =>
     api.get('/notifications/recommendations', { params: { user_id: userId } }),
 }
@@ -160,8 +162,5 @@ export const dailyTaskApi = {
     api.get<DailyTaskTodayResponse>('/daily-tasks/today', { params: { user_id: userId } }),
   /** 更新任务项状态（标记完成/跳过）。 */
   updateItem: (taskId: string, itemId: string, status: 'done' | 'skipped') =>
-    api.patch<DailyTaskItemUpdateResponse>(
-      `/daily-tasks/${taskId}/items/${itemId}`,
-      { status },
-    ),
+    api.patch<DailyTaskItemUpdateResponse>(`/daily-tasks/${taskId}/items/${itemId}`, { status }),
 }

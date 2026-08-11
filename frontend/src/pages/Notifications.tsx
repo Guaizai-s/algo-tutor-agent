@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react'
-import { Bell, Check, CheckCheck, BookOpen, RefreshCw, AlertCircle, Loader2, Target, Zap } from 'lucide-react'
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  BookOpen,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
+  Target,
+  Zap,
+} from 'lucide-react'
 import { notificationApi } from '../utils/api'
 import type { Notification } from '../types'
 

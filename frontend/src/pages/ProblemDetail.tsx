@@ -90,8 +90,7 @@ const ProblemDetail: React.FC = () => {
   const hints = problem.hints || []
   // CF 外链题：来源是 codeforces，或无样例且有外链 URL
   const isCFProblem =
-    problem.source === 'codeforces' ||
-    (!!problem.external_url && !problem.sample_input)
+    problem.source === 'codeforces' || (!!problem.external_url && !problem.sample_input)
 
   const handleSubmit = async () => {
     if (!id) {
@@ -191,8 +190,7 @@ const ProblemDetail: React.FC = () => {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
                       >
-                        <ExternalLink size={12} />
-                        去 Codeforces 读题 / 提交
+                        <ExternalLink size={12} />去 Codeforces 读题 / 提交
                       </a>
                     )}
                     {!cfBound && (
