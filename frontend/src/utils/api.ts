@@ -8,6 +8,7 @@ import type {
   BindCFResponse,
   CodeExecutionResult,
   ColdStartResultResponse,
+  DailyTaskItemUpdateResponse,
   DailyTaskTodayResponse,
   LearningPathGenerateRequest,
   LearningPathRead,
@@ -157,4 +158,10 @@ export const dailyTaskApi = {
   /** 获取今日任务（幂等）。 */
   getToday: (userId: string) =>
     api.get<DailyTaskTodayResponse>('/daily-tasks/today', { params: { user_id: userId } }),
+  /** 更新任务项状态（标记完成/跳过）。 */
+  updateItem: (taskId: string, itemId: string, status: 'done' | 'skipped') =>
+    api.patch<DailyTaskItemUpdateResponse>(
+      `/daily-tasks/${taskId}/items/${itemId}`,
+      { status },
+    ),
 }
