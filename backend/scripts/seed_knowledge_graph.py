@@ -41,6 +41,7 @@ CATEGORY_ROOT_SLUG_PREFIX = "cat-"
 
 # 一级分类顺序（用于 order）
 CATEGORY_ORDER = [
+    "入门",
     "基础",
     "数据结构",
     "图论",
@@ -68,6 +69,7 @@ ZUO_LEVEL_MAP: dict[str, tuple[KnowledgePointDifficulty, LectureLevel]] = {
 
 # OI-wiki category -> KnowledgePointDifficulty 推断
 OI_CATEGORY_DIFFICULTY: dict[str, KnowledgePointDifficulty] = {
+    "入门": KnowledgePointDifficulty.EASY,
     "基础": KnowledgePointDifficulty.EASY,
     "语言基础": KnowledgePointDifficulty.EASY,
     "简介": KnowledgePointDifficulty.EASY,
@@ -82,6 +84,21 @@ OI_CATEGORY_DIFFICULTY: dict[str, KnowledgePointDifficulty] = {
     "竞赛": KnowledgePointDifficulty.HARD,
     "专题": KnowledgePointDifficulty.HARD,
     "杂项": KnowledgePointDifficulty.MEDIUM,
+}
+
+# 强制覆盖特定知识点 slug 的 category（修复数据源分类错位）
+# 这些知识点在 OI-wiki 原属「基础」/「简介」，但语义上更适合归入「入门」/「数学」
+# 与 scripts/reorganize_categories.py 的 REALLOCATE_MAP 保持一致
+SLUG_CATEGORY_OVERRIDE: dict[str, str] = {
+    # 入门：最基础的算法起步知识点
+    "oi-basic-complexity": "入门",
+    "oi-basic-enumerate": "入门",
+    "oi-basic-simulate": "入门",
+    "oi-basic-divide-and-conquer": "入门",
+    "oi-prefix-sum": "入门",
+    "oi-sliding-window": "入门",
+    # 数学符号表：OI-wiki 原属「简介」，归入「数学」更贴切
+    "oi-intro-symbol": "数学",
 }
 
 # 同主题合并的关键词归一化映射：用于 OI-wiki 与左程云去重
@@ -674,6 +691,7 @@ def build_specs(entries: list[dict]) -> tuple[list[KnowledgePointSpec], list[Kno
         used_names.add(r.name)
 
     def get_leaf(slug: str, name: str, category: str) -> KnowledgePointSpec:
+        category = SLUG_CATEGORY_OVERRIDE.get(slug, category)
         if slug not in leaf_map:
             # name 去重：与根/其他叶子冲突时追加 category
             final_name = name

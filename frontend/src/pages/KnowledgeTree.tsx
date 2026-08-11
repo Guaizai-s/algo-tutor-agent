@@ -22,15 +22,18 @@ interface KnowledgeNode extends RoadmapKnowledgeNode {
   children: KnowledgeNode[]
 }
 
-// 7 个一级分类 → 颜色 + 图标（用于根节点视觉区分）
+// 10 个一级分类 → 颜色 + 图标（用于根节点视觉区分）
 const CATEGORY_META: Record<string, { color: string; icon: LucideIcon }> = {
+  入门: { color: 'text-green-600', icon: BookOpen },
   基础: { color: 'text-blue-600', icon: BookOpen },
   数据结构: { color: 'text-violet-600', icon: BookOpen },
   图论: { color: 'text-emerald-600', icon: BookOpen },
   动态规划: { color: 'text-amber-600', icon: BookOpen },
   字符串: { color: 'text-pink-600', icon: BookOpen },
+  搜索: { color: 'text-cyan-600', icon: BookOpen },
   数学: { color: 'text-orange-600', icon: BookOpen },
   杂项: { color: 'text-slate-600', icon: BookOpen },
+  竞赛: { color: 'text-red-600', icon: BookOpen },
 }
 
 // 状态 → 视觉配置
@@ -481,7 +484,7 @@ const KnowledgeTree: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">算法路线图</h1>
           <p className="text-gray-600 mt-2">
-            按 7 大分类组织的算法学习路线，融合 OI-wiki 与左程云讲义两大数据源
+            按 10 大分类组织的算法学习路线，融合 OI-wiki 与左程云讲义两大数据源
           </p>
         </div>
         {!hasPath && !loading && !error && (
