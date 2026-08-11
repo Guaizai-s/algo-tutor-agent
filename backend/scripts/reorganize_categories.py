@@ -5,13 +5,8 @@
   包括 10 个搜索类、6 个竞赛类、1 个数学符号表、6 个入门级知识点。
   这导致 Progress 页面「基础」分组混入无关内容，KnowledgeTree 分类语义混乱。
 
-本次整理：
-  1. 新建 3 个一级分类根节点：入门(-1000)、搜索(5000)、竞赛(11000)
-  2. 把最基础的 6 个算法入门知识点从「基础」迁到「入门」
-  3. 把错位的搜索类(10)迁到「搜索」、竞赛类(6)迁到「竞赛」、数学符号表迁到「数学」
-  4. 「基础」仅保留：基础算法(含差分)、均摊复杂度、构造
-
 迁移只改 parent_id，不影响题目关联 / 讲义 / 掌握度（均按 knowledge_id 关联）。
+分类映射从 _classification_config.REALLOCATE_MAP 导入，与 enrichment/seeding 保持一致。
 
 运行方式：
     docker compose exec backend python -m scripts.reorganize_categories
@@ -27,8 +22,10 @@ from sqlalchemy import select
 
 from app.core.database import async_session_maker
 from app.models.knowledge import KnowledgePoint, KnowledgePointDifficulty
+from scripts._classification_config import REALLOCATE_MAP
 
 # 新建的一级分类根节点配置：slug → (name, order, difficulty)
+# 注：这些根节点如已由 seed_knowledge_graph 创建则只更新元数据
 NEW_CATEGORY_ROOTS: dict[str, tuple[str, int, KnowledgePointDifficulty]] = {
     "cat-入门": ("入门分类", -1000, KnowledgePointDifficulty.EASY),
     "cat-搜索": ("搜索分类", 5000, KnowledgePointDifficulty.MEDIUM),
@@ -37,38 +34,6 @@ NEW_CATEGORY_ROOTS: dict[str, tuple[str, int, KnowledgePointDifficulty]] = {
 
 # 已有的一级分类根节点 slug（用于数学符号表归位）
 MATH_ROOT_SLUG = "cat-数学"
-
-# 知识点 slug → 目标一级分类 slug（parent 归位映射）
-# 仅列出需要迁移的；未列出的保持原 parent 不变
-REALLOCATE_MAP: dict[str, str] = {
-    # —— 入门：最基础的算法起步知识点 ——
-    "oi-basic-complexity": "cat-入门",
-    "oi-basic-enumerate": "cat-入门",
-    "oi-basic-simulate": "cat-入门",
-    "oi-basic-divide-and-conquer": "cat-入门",
-    "oi-prefix-sum": "cat-入门",
-    "oi-sliding-window": "cat-入门",
-    # —— 搜索：从基础归位 ——
-    "oi-search-alpha-beta": "cat-搜索",
-    "oi-search-astar": "cat-搜索",
-    "oi-search-backtracking": "cat-搜索",
-    "oi-bfs": "cat-搜索",
-    "oi-search-bidirectional": "cat-搜索",
-    "oi-search-dlx": "cat-搜索",
-    "oi-search-heuristic": "cat-搜索",
-    "oi-search-idastar": "cat-搜索",
-    "oi-search-iterative": "cat-搜索",
-    "oi-search-opt": "cat-搜索",
-    # —— 竞赛：从基础归位 ——
-    "oi-contest-common-mistakes": "cat-竞赛",
-    "oi-contest-common-tricks": "cat-竞赛",
-    "oi-contest-dictionary": "cat-竞赛",
-    "oi-contest-interaction": "cat-竞赛",
-    "oi-contest-io": "cat-竞赛",
-    "oi-contest-problems": "cat-竞赛",
-    # —— 数学符号表：从基础归位到数学 ——
-    "oi-intro-symbol": MATH_ROOT_SLUG,
-}
 
 
 async def main() -> None:

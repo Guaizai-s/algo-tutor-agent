@@ -1,14 +1,15 @@
 """Seed the knowledge graph from external sources.
 
 数据储存层：仅负责 DB upsert（knowledge_points / lectures / code_templates / prerequisites）。
-数据清洗（解析 combined_index、合并多源、生成 KnowledgePointSpec）在 ``scripts._seed_data``。
+分类清洗由 ``scripts._enrich_index`` 完成（预计算 enriched_index.json），
+组装由 ``scripts._seed_data.build_specs`` 完成。
 
 Run from the backend container (``./data`` is mounted at ``/data``):
 
     docker compose exec backend python -m scripts.seed_knowledge_graph
 
+若 enriched_index.json 不存在，会自动运行 _enrich_index 生成。
 Idempotent: existing rows are matched by slug and updated in place.
-Lecture.source 字段在 upsert 时同步写入（含存量迁移），保证 OI-wiki / 左程云来源可区分。
 """
 
 from __future__ import annotations
@@ -24,13 +25,15 @@ from app.models.knowledge import (
     KnowledgePrerequisite,
     Lecture,
 )
-from scripts._seed_data import (
+from scripts._classification_config import (
     CATEGORY_ROOT_SLUG_PREFIX,
-    DATA_ROOT,
     PREREQUISITES,
+)
+from scripts._seed_data import (
+    DATA_ROOT,
     KnowledgePointSpec,
     build_specs,
-    load_combined_index,
+    load_enriched_index,
 )
 
 # ---------------- DB upsert ----------------
@@ -225,8 +228,16 @@ async def upsert_prerequisites(slug_to_kp: dict[str, KnowledgePoint]) -> int:
 
 
 async def main() -> None:
-    print(f"Loading combined index from {DATA_ROOT} ...")
-    entries = load_combined_index()
+    # 若 enriched_index.json 不存在，自动运行 enrichment
+    enriched_path = DATA_ROOT / "enriched_index.json"
+    if not enriched_path.exists():
+        print("enriched_index.json not found, running _enrich_index ...")
+        from scripts._enrich_index import main as enrich_main
+
+        enrich_main()
+
+    print(f"Loading enriched index from {DATA_ROOT} ...")
+    entries = load_enriched_index()
     print(f"  {len(entries)} entries")
 
     print("Building KnowledgePointSpec ...")
