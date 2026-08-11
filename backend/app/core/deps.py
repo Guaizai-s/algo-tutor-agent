@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Annotated
 from uuid import UUID
 
@@ -16,6 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import decode_access_token_or_none
 from app.models.user import User
+from app.services.codeforces.client import (
+    CodeforcesClient,
+    close_codeforces_client,
+    get_codeforces_client,
+)
 
 
 async def get_current_user(
@@ -59,3 +65,15 @@ async def get_current_user(
 
 # 类型别名，便于路由签名
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_codeforces_api_client() -> AsyncGenerator[CodeforcesClient, None]:
+    """为单次 HTTP 请求创建并关闭 CF API 客户端。"""
+    client = get_codeforces_client()
+    try:
+        yield client
+    finally:
+        await close_codeforces_client(client)
+
+
+CodeforcesClientDep = Annotated[CodeforcesClient, Depends(get_codeforces_api_client)]

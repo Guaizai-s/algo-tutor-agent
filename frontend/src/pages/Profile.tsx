@@ -1,8 +1,7 @@
 import React, { useState } from 'react'
-import { ExternalLink, Link2, Unlink, Save, CheckCircle, AlertCircle, Trophy } from 'lucide-react'
+import { ExternalLink, Link2, Save, CheckCircle, AlertCircle, Trophy } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import type { BindCFResponse, TargetMedal as MedalType } from '../types'
-import { authApi } from '../utils/api'
 
 const MEDAL_OPTIONS: { value: MedalType; label: string; color: string }[] = [
   { value: 'bronze', label: '铜牌', color: 'bg-amber-100 text-amber-700' },
@@ -29,10 +28,8 @@ const Profile: React.FC = () => {
     setCfError(null)
     setCfResult(null)
     try {
-      const resp = await authApi.bindCF({ handle })
-      setCfResult(resp.data)
-      // 同步 store 中的 user
-      await bindCF(handle)
+      const result = await bindCF(handle)
+      setCfResult(result)
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setCfError(detail || '绑定失败，请确认 handle 正确后重试')
@@ -122,29 +119,7 @@ const Profile: React.FC = () => {
                 </p>
               </div>
             </div>
-
-            <details className="text-sm">
-              <summary className="cursor-pointer text-gray-600 hover:text-gray-800 inline-flex items-center gap-1">
-                <Unlink size={14} />
-                更换绑定的 handle
-              </summary>
-              <div className="mt-3 flex gap-2">
-                <input
-                  type="text"
-                  value={cfHandle}
-                  onChange={(e) => setCfHandle(e.target.value)}
-                  placeholder="输入新的 CF handle"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-                />
-                <button
-                  onClick={handleBindCF}
-                  disabled={cfBinding}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm transition-colors"
-                >
-                  {cfBinding ? '绑定中...' : '更换'}
-                </button>
-              </div>
-            </details>
+            <p className="text-xs text-gray-500">如需更换绑定，请联系管理员确认账号归属后处理。</p>
           </div>
         ) : (
           <div className="space-y-3">

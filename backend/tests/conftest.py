@@ -117,6 +117,26 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
+async def auth_user(db_session: AsyncSession) -> dict[str, Any]:
+    """创建已登录用户并返回 Authorization header。"""
+    from app.core.security import create_access_token, hash_password
+    from app.models.user import User
+
+    marker = uuid4().hex
+    user = User(
+        email=f"user-{marker}@example.com",
+        username=f"user_{marker[:12]}",
+        hashed_password=hash_password("secret123"),
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return {
+        "user": user,
+        "headers": {"Authorization": f"Bearer {create_access_token(user.id)}"},
+    }
+
+
+@pytest_asyncio.fixture
 async def seed_data(db_session: AsyncSession) -> dict[str, Any]:
     """Insert a published problem + knowledge point + lecture.
 

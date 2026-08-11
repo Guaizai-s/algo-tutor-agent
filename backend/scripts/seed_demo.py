@@ -17,10 +17,12 @@ from app.core.database import async_session_maker
 from app.models.knowledge import (
     KnowledgePoint,
     KnowledgePointDifficulty,
+    KnowledgePrerequisite,
     Lecture,
     LectureLevel,
 )
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
+from app.services.codeforces.sync import sync_cf_tag_knowledge_mappings
 
 KNOWLEDGE = [
     {
@@ -79,6 +81,51 @@ KNOWLEDGE = [
         "order": 70,
         "lecture": "接雨水可用左右指针和左右最高柱。较低一侧的最高值决定该侧当前位置能接的水量。",
     },
+    {
+        "slug": "demo-sorting",
+        "name": "排序（验证）",
+        "description": "按指定键重排数据，是二分、贪心和双指针等算法的常见前置步骤。",
+        "difficulty": KnowledgePointDifficulty.EASY,
+        "order": 25,
+        "lecture": "排序后，相邻关系与单调性会显现。需要同时考虑排序键、稳定性和整体时间复杂度。",
+    },
+    {
+        "slug": "demo-greedy",
+        "name": "贪心（验证）",
+        "description": "在每一步选择当前最优决策，并证明局部最优能够导向全局最优。",
+        "difficulty": KnowledgePointDifficulty.MEDIUM,
+        "order": 45,
+        "lecture": "贪心算法的关键不是选择本身，而是交换论证或单调性证明。区间调度通常按结束时间排序。",
+    },
+    {
+        "slug": "demo-shortest-paths",
+        "name": "最短路（验证）",
+        "description": "在带权或无权图中寻找从起点到其他节点的最小代价路径。",
+        "difficulty": KnowledgePointDifficulty.HARD,
+        "order": 65,
+        "lecture": "无权图使用 BFS；非负边权图使用 Dijkstra。松弛操作用于持续改进当前最短距离。",
+    },
+]
+
+CF_TAG_BY_KNOWLEDGE_SLUG = {
+    "demo-array-hash": "data structures",
+    "demo-stack": "data structures",
+    "demo-binary-search": "binary search",
+    "demo-sliding-window": "two pointers",
+    "demo-dynamic-programming": "dp",
+    "demo-graph-search": "dfs and similar",
+    "demo-two-pointers": "two pointers",
+    "demo-sorting": "sortings",
+    "demo-greedy": "greedy",
+    "demo-shortest-paths": "shortest paths",
+}
+
+PREREQUISITES = [
+    ("demo-sorting", "demo-array-hash"),
+    ("demo-binary-search", "demo-sorting"),
+    ("demo-greedy", "demo-sorting"),
+    ("demo-sliding-window", "demo-two-pointers"),
+    ("demo-shortest-paths", "demo-graph-search"),
 ]
 
 
@@ -231,7 +278,94 @@ PROBLEMS = [
             {"input": "6\n4 2 0 3 2 5\n", "output": "9\n"},
         ],
     },
+    {
+        "slug": "demo-sort-numbers",
+        "title": "整数排序（诊断题）",
+        "difficulty": ProblemDifficulty.EASY,
+        "knowledge_slug": "demo-sorting",
+        "description": "给定 n 个整数，按非递减顺序输出。",
+        "sample_input": "5\n3 1 4 1 5\n",
+        "sample_output": "1 1 3 4 5\n",
+        "hints": ["使用语言标准库排序。", "注意相同元素需要全部保留。"],
+        "test_cases": [{"input": "5\n3 1 4 1 5\n", "output": "1 1 3 4 5\n"}],
+    },
+    {
+        "slug": "demo-merge-sorted-arrays",
+        "title": "合并两个有序数组（诊断题）",
+        "difficulty": ProblemDifficulty.EASY,
+        "knowledge_slug": "demo-two-pointers",
+        "description": "合并两个非递减整数数组，并保持输出有序。",
+        "sample_input": "3 4\n1 4 7\n2 2 6 8\n",
+        "sample_output": "1 2 2 4 6 7 8\n",
+        "hints": ["分别维护两个数组的当前位置。"],
+        "test_cases": [
+            {"input": "3 4\n1 4 7\n2 2 6 8\n", "output": "1 2 2 4 6 7 8\n"}
+        ],
+    },
+    {
+        "slug": "demo-interval-scheduling",
+        "title": "最多不重叠区间（诊断题）",
+        "difficulty": ProblemDifficulty.MEDIUM,
+        "knowledge_slug": "demo-greedy",
+        "description": "从若干区间中选出最多数量的互不重叠区间。",
+        "sample_input": "4\n1 3\n2 4\n3 5\n6 8\n",
+        "sample_output": "3\n",
+        "hints": ["优先选择结束时间最早的区间。"],
+        "test_cases": [{"input": "4\n1 3\n2 4\n3 5\n6 8\n", "output": "3\n"}],
+    },
+    {
+        "slug": "demo-grid-shortest-path",
+        "title": "网格最短步数（诊断题）",
+        "difficulty": ProblemDifficulty.MEDIUM,
+        "knowledge_slug": "demo-shortest-paths",
+        "description": "在只含可走格与障碍格的网格中，求起点到终点的最少移动步数。",
+        "sample_input": "3 3\n...\n.#.\n...\n",
+        "sample_output": "4\n",
+        "hints": ["所有移动代价相同，使用 BFS。"],
+        "test_cases": [{"input": "3 3\n...\n.#.\n...\n", "output": "4\n"}],
+    },
+    {
+        "slug": "demo-topological-order",
+        "title": "课程依赖排序（诊断题）",
+        "difficulty": ProblemDifficulty.MEDIUM,
+        "knowledge_slug": "demo-graph-search",
+        "description": "给定有向无环图，输出任意一个合法的拓扑顺序。",
+        "sample_input": "4 3\n1 2\n1 3\n3 4\n",
+        "sample_output": "1 2 3 4\n",
+        "hints": ["维护每个节点的入度。"],
+        "test_cases": [{"input": "4 3\n1 2\n1 3\n3 4\n", "output": "1 2 3 4\n"}],
+    },
+    {
+        "slug": "demo-longest-increasing-subsequence",
+        "title": "最长递增子序列（诊断题）",
+        "difficulty": ProblemDifficulty.MEDIUM,
+        "knowledge_slug": "demo-dynamic-programming",
+        "description": "求整数序列中最长严格递增子序列的长度。",
+        "sample_input": "8\n10 9 2 5 3 7 101 18\n",
+        "sample_output": "4\n",
+        "hints": ["可先考虑 O(n²) 的状态转移。"],
+        "test_cases": [{"input": "8\n10 9 2 5 3 7 101 18\n", "output": "4\n"}],
+    },
+    {
+        "slug": "demo-dijkstra",
+        "title": "非负权图最短路（诊断题）",
+        "difficulty": ProblemDifficulty.HARD,
+        "knowledge_slug": "demo-shortest-paths",
+        "description": "给定非负边权有向图，求起点到终点的最短距离。",
+        "sample_input": "4 5 1 4\n1 2 2\n1 3 5\n2 3 1\n2 4 6\n3 4 1\n",
+        "sample_output": "4\n",
+        "hints": ["使用优先队列优化 Dijkstra。"],
+        "test_cases": [
+            {"input": "4 5 1 4\n1 2 2\n1 3 5\n2 3 1\n2 4 6\n3 4 1\n", "output": "4\n"}
+        ],
+    },
 ]
+
+DEFAULT_DIAGNOSTIC_RATING = {
+    ProblemDifficulty.EASY: 1000.0,
+    ProblemDifficulty.MEDIUM: 1400.0,
+    ProblemDifficulty.HARD: 1800.0,
+}
 
 
 async def seed() -> None:
@@ -253,9 +387,29 @@ async def seed() -> None:
             kp.description = item["description"]
             kp.difficulty = item["difficulty"]
             kp.order = item["order"]
+            kp.cf_tag = CF_TAG_BY_KNOWLEDGE_SLUG[item["slug"]]
             knowledge_by_slug[item["slug"]] = kp
 
         await session.flush()
+
+        for knowledge_slug, prerequisite_slug in PREREQUISITES:
+            knowledge_id = knowledge_by_slug[knowledge_slug].id
+            prerequisite_id = knowledge_by_slug[prerequisite_slug].id
+            existing = (
+                await session.execute(
+                    select(KnowledgePrerequisite).where(
+                        KnowledgePrerequisite.knowledge_id == knowledge_id,
+                        KnowledgePrerequisite.prerequisite_id == prerequisite_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(
+                    KnowledgePrerequisite(
+                        knowledge_id=knowledge_id,
+                        prerequisite_id=prerequisite_id,
+                    )
+                )
 
         for item in KNOWLEDGE:
             kp = knowledge_by_slug[item["slug"]]
@@ -295,6 +449,9 @@ async def seed() -> None:
             problem.title = item["title"]
             problem.description = item["description"].strip()
             problem.difficulty = item["difficulty"]
+            problem.cf_rating = item.get(
+                "cf_rating", DEFAULT_DIAGNOSTIC_RATING[item["difficulty"]]
+            )
             problem.status = ProblemStatus.PUBLISHED
             problem.time_limit_ms = 2000
             problem.memory_limit_kb = 262144
@@ -309,13 +466,16 @@ async def seed() -> None:
             problem.test_cases = item["test_cases"]
             problem.knowledge_points = [knowledge_by_slug[item["knowledge_slug"]]]
 
+        await session.flush()
+        mapped_cf = await sync_cf_tag_knowledge_mappings(session)
         await session.commit()
 
     print(
         "Demo seed complete: "
         f"{created_knowledge} knowledge points, "
         f"{created_lectures} lectures, "
-        f"{created_problems} problems created."
+        f"{created_problems} problems created, "
+        f"{mapped_cf} CF problem mappings added."
     )
 
 

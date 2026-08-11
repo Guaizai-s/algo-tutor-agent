@@ -17,7 +17,7 @@ import {
   Zap,
   ExternalLink,
 } from 'lucide-react'
-import { progressApi, learningApi, notificationApi, DEV_USER_ID } from '../utils/api'
+import { progressApi, learningApi, notificationApi } from '../utils/api'
 import type {
   MasteryByCategory,
   Progress,
@@ -61,7 +61,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview(DEV_USER_ID)
+      .getOverview()
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
@@ -79,7 +79,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     learningApi
-      .getCurrentPath(DEV_USER_ID)
+      .getCurrentPath()
       .then((resp) => {
         if (!cancelled) setLearningPath(resp.data as LearningPathRead)
       })
@@ -97,7 +97,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getActivity(DEV_USER_ID, 7)
+      .getActivity(7)
       .then((resp) => {
         if (!cancelled) setActivity(resp.data as ActivityResponse)
       })
@@ -115,7 +115,7 @@ const ProgressPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     notificationApi
-      .getRecommendations(DEV_USER_ID)
+      .getRecommendations()
       .then((resp) => {
         if (!cancelled) setRecommendations(resp.data as RecommendationResponse)
       })

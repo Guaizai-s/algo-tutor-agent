@@ -10,14 +10,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.models.user import TargetMedal, UserRole
 
-# 基本邮箱格式校验，比 EmailStr 宽松，允许 .local 等内部域名
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_CF_HANDLE_RE = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 def _validate_email(value: str) -> str:
-    """基本邮箱格式校验：允许内部域名（如 .local）。"""
     normalized = value.strip().lower()
-    if not _EMAIL_RE.match(normalized):
+    if not _EMAIL_RE.fullmatch(normalized):
         raise ValueError("invalid email format")
     return normalized
 
@@ -74,32 +73,55 @@ class UserRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserRead
-
-
 class ProfileUpdateRequest(BaseModel):
-    """更新 ACM 档案字段（全部可选）。"""
+    """Fields users may update without going through a provider binding flow."""
 
+    username: str | None = Field(default=None, min_length=2, max_length=64)
+    avatar: str | None = Field(default=None, max_length=512)
     school: str | None = Field(default=None, max_length=255)
-    cf_handle: str | None = Field(default=None, max_length=64)
     atcoder_handle: str | None = Field(default=None, max_length=64)
     target_medal: TargetMedal | None = None
 
+    @field_validator("username")
+    @classmethod
+    def normalize_profile_username(cls, value: str | None) -> str | None:
+        if value is None:
+            raise ValueError("username cannot be null")
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("username must contain at least 2 non-whitespace characters")
+        return normalized
+
+    @field_validator("avatar", "school", "atcoder_handle")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
 
 class BindCFRequest(BaseModel):
-    """绑定 Codeforces handle 请求。"""
+    handle: str = Field(min_length=3, max_length=24)
 
-    handle: str = Field(min_length=1, max_length=64)
+    @field_validator("handle")
+    @classmethod
+    def normalize_handle(cls, value: str) -> str:
+        normalized = value.strip()
+        if not _CF_HANDLE_RE.fullmatch(normalized):
+            raise ValueError("invalid Codeforces handle format")
+        return normalized
 
 
 class BindCFResponse(BaseModel):
-    """CF 绑定结果。"""
-
     handle: str
     current_rating: int | None
     max_rating: int | None
     rank: str | None
     message: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead

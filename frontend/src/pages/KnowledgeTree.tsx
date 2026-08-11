@@ -15,7 +15,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { knowledgeApi, learningApi, coldstartApi, DEV_USER_ID } from '../utils/api'
+import { knowledgeApi, learningApi, coldstartApi } from '../utils/api'
 import type { KnowledgePointRef, RoadmapKnowledgeNode, RoadmapNodeStatus } from '../types'
 
 interface KnowledgeNode extends RoadmapKnowledgeNode {
@@ -110,7 +110,7 @@ const KnowledgeTree: React.FC = () => {
       // 并行加载知识树和路线图状态
       const [treeResp, roadmapResp] = await Promise.all([
         knowledgeApi.getTree(),
-        learningApi.getRoadmap(DEV_USER_ID).catch(() => null),
+        learningApi.getRoadmap().catch(() => null),
       ])
 
       const kpItems = treeResp.data as Array<{
@@ -197,8 +197,8 @@ const KnowledgeTree: React.FC = () => {
     setError(null)
     try {
       // 先尝试 CF 冷启动（写入 mastery），再生成路径
-      await coldstartApi.cfColdStart(DEV_USER_ID).catch(() => null)
-      await learningApi.generatePath({ user_id: DEV_USER_ID, preview_count: 8 })
+      await coldstartApi.cfColdStart().catch(() => null)
+      await learningApi.generatePath({ preview_count: 8 })
       await loadData()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '生成学习路径失败')
@@ -210,7 +210,7 @@ const KnowledgeTree: React.FC = () => {
   const handleMarkMastered = async (knowledgeId: string) => {
     setMarkingMastered((prev) => new Set(prev).add(knowledgeId))
     try {
-      await learningApi.markMastered({ user_id: DEV_USER_ID, knowledge_id: knowledgeId })
+      await learningApi.markMastered({ knowledge_id: knowledgeId })
       await loadData()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '标记失败')

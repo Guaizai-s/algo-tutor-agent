@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import CurrentUser
 from app.services.review import (
     complete_review,
     create_review_record,
@@ -31,12 +32,12 @@ router = APIRouter(prefix="/review", tags=["review"])
 
 @router.post("/start")
 async def api_start_review(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     knowledge_id: UUID = Query(..., description="知识点 ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """创建复习记录（首次学习时调用）。幂等。"""
-    record = await create_review_record(db, user_id, knowledge_id)
+    record = await create_review_record(db, current_user.id, knowledge_id)
     return {
         "id": str(record.id),
         "knowledge_id": str(record.knowledge_id),
@@ -47,13 +48,13 @@ async def api_start_review(
 
 @router.post("/complete")
 async def api_complete_review(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     knowledge_id: UUID = Query(..., description="知识点 ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """完成一次复习：推进到下一阶段。"""
     try:
-        record = await complete_review(db, user_id, knowledge_id)
+        record = await complete_review(db, current_user.id, knowledge_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {
@@ -67,11 +68,11 @@ async def api_complete_review(
 
 @router.get("/list")
 async def api_get_review_list(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """获取复习列表（前端兼容接口，与 /due 行为一致）。"""
-    records = await get_due_reviews(db, user_id)
+    records = await get_due_reviews(db, current_user.id)
     return [
         {
             "id": str(r.id),
@@ -85,11 +86,11 @@ async def api_get_review_list(
 
 @router.get("/due")
 async def api_get_due_reviews(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """获取到期待复习项。"""
-    records = await get_due_reviews(db, user_id)
+    records = await get_due_reviews(db, current_user.id)
     return [
         {
             "id": str(r.id),
@@ -103,19 +104,19 @@ async def api_get_due_reviews(
 
 @router.get("/status")
 async def api_get_review_status(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """获取复习状态概览。"""
-    return await get_review_status(db, user_id)
+    return await get_review_status(db, current_user.id)
 
 
 @router.get("/problem")
 async def api_get_review_problem(
-    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    current_user: CurrentUser,
     knowledge_id: UUID = Query(..., description="知识点 ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """获取复习推荐题目（排除已 AC 题）。"""
-    problem_id = await get_review_problem(db, knowledge_id, user_id)
+    problem_id = await get_review_problem(db, knowledge_id, current_user.id)
     return {"problem_id": str(problem_id) if problem_id else None}

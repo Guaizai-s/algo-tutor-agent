@@ -16,16 +16,19 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.codeforces import CodeforcesAccount, RatingHistory, Submission
+from app.models.knowledge import KnowledgePoint
 from app.models.learning import UserProblemAC
-from app.models.problem import Problem, ProblemSource, ProblemStatus
+from app.models.problem import Problem, ProblemKnowledgePoint, ProblemSource, ProblemStatus
+from app.models.wrongbook import WrongBookEntry
 from app.services.codeforces.client import CodeforcesClient, get_codeforces_client
 from app.services.progress import recompute_mastery
 
@@ -33,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 # 单次 upsert 批量大小，避免单条 SQL 过大
 UPSERT_BATCH_SIZE = 500
+WRONG_VERDICTS = {"WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", "RUNTIME_ERROR"}
 
 
 async def sync_problemset(
@@ -72,8 +76,9 @@ async def sync_problemset(
         synced += len(batch)
 
     await db.flush()
-    logger.info("CF problemset sync: synced=%d / total=%d", synced, len(problems))
-    return {"synced": synced, "total": len(problems)}
+    mapped = await sync_cf_tag_knowledge_mappings(db)
+    logger.info("CF problemset sync: synced=%d / total=%d, mappings=%d", synced, len(problems), mapped)
+    return {"synced": synced, "total": len(problems), "mappings": mapped}
 
 
 def _problem_to_row(p: dict) -> dict:
@@ -104,6 +109,51 @@ def _problem_to_row(p: dict) -> dict:
         "cf_rating": float(rating) if rating is not None else None,
         "status": ProblemStatus.PUBLISHED,
     }
+
+
+async def sync_cf_tag_knowledge_mappings(db: AsyncSession) -> int:
+    """按 KnowledgePoint.cf_tag 为 CF 题目补齐知识点关联，幂等执行。"""
+    tag_rows = (
+        await db.execute(
+            select(KnowledgePoint.id, KnowledgePoint.cf_tag).where(KnowledgePoint.cf_tag.is_not(None))
+        )
+    ).all()
+    tag_to_knowledge: dict[str, set[UUID]] = defaultdict(set)
+    for row in tag_rows:
+        if row.cf_tag:
+            tag_to_knowledge[row.cf_tag].add(row.id)
+    if not tag_to_knowledge:
+        return 0
+
+    problem_rows = (
+        await db.execute(
+            select(Problem.id, Problem.cf_tags).where(
+                Problem.source == ProblemSource.CODEFORCES,
+                Problem.cf_tags.is_not(None),
+            )
+        )
+    ).all()
+    pairs = {
+        (row.id, knowledge_id)
+        for row in problem_rows
+        for tag in (row.cf_tags or [])
+        if tag in tag_to_knowledge
+        for knowledge_id in tag_to_knowledge[tag]
+    }
+    if not pairs:
+        return 0
+
+    inserted = 0
+    rows = [{"problem_id": problem_id, "knowledge_id": knowledge_id} for problem_id, knowledge_id in pairs]
+    for offset in range(0, len(rows), UPSERT_BATCH_SIZE):
+        result = await db.execute(
+            pg_insert(ProblemKnowledgePoint)
+            .values(rows[offset : offset + UPSERT_BATCH_SIZE])
+            .on_conflict_do_nothing()
+        )
+        inserted += max(result.rowcount or 0, 0)
+    await db.flush()
+    return inserted
 
 
 # CF API user.status 分页参数
@@ -270,12 +320,31 @@ async def sync_user_status(
         }
 
         # 幂等插入：若 (cf_submission_id, user_id) 已存在则跳过
-        stmt = pg_insert(Submission).values(row).on_conflict_do_nothing(constraint="uq_submission_cf_id_user")
-        result = await db.execute(stmt)
-        if result.rowcount > 0:
+        stmt = (
+            pg_insert(Submission)
+            .values(row)
+            .on_conflict_do_nothing(constraint="uq_submission_cf_id_user")
+            .returning(Submission.id)
+        )
+        inserted_submission_id = (await db.execute(stmt)).scalar_one_or_none()
+        if inserted_submission_id is not None:
             new_sub_count += 1
             if problem_id is not None:
                 affected_problem_ids.add(problem_id)
+
+            if verdict in WRONG_VERDICTS:
+                await db.execute(
+                    pg_insert(WrongBookEntry)
+                    .values(
+                        user_id=account.user_id,
+                        submission_id=inserted_submission_id,
+                        problem_id=problem_id,
+                        verdict=verdict,
+                        retry_count=0,
+                        resolved=False,
+                    )
+                    .on_conflict_do_nothing(constraint="uq_wrongbook_submission_user")
+                )
 
             # verdict=OK 写入 UserProblemAC（幂等）
             if verdict == "OK" and problem_id is not None:
@@ -290,6 +359,15 @@ async def sync_user_status(
                 ac_result = await db.execute(ac_stmt)
                 if ac_result.rowcount > 0:
                     new_ac_count += 1
+                await db.execute(
+                    update(WrongBookEntry)
+                    .where(
+                        WrongBookEntry.user_id == account.user_id,
+                        WrongBookEntry.problem_id == problem_id,
+                        WrongBookEntry.resolved.is_(False),
+                    )
+                    .values(resolved=True, last_retry_at=datetime.now(tz=UTC))
+                )
 
     # 更新游标：只有真正拉完所有数据（reached_cursor=True）时才推进，防止数据丢失
     # truncated=True 时游标保持不变，下次同步从同一游标继续（幂等约束保证不重复）
@@ -380,8 +458,6 @@ async def _recompute_mastery_for_problems(db: AsyncSession, user_id: UUID, probl
     """
     if not problem_ids:
         return
-    from app.models.problem import ProblemKnowledgePoint
-
     kp_ids = (
         (
             await db.execute(
@@ -426,7 +502,7 @@ async def sync_user_rating(
         return {"new_ratings": 0, "current_rating": account.current_rating, "error": str(exc)}
 
     new_count = 0
-    current_rating: int | None = None
+    current_rating: int | None = account.current_rating
 
     for r in ratings_data:
         contest_id = r["contestId"]
@@ -447,6 +523,7 @@ async def sync_user_rating(
         # 最新 rating 是最后一条
         current_rating = r.get("newRating")
 
+    # 没参加过 rated contest 时保留 user.info 得到的当前 rating（若有）。
     account.current_rating = current_rating
     account.last_rating_synced_at = datetime.now(tz=UTC)
     await db.flush()
