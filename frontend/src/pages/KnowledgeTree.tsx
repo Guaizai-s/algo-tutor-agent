@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Code2,
   Loader2,
-  Lock,
   Search,
   Sparkles,
   Target,
@@ -54,10 +53,10 @@ const STATUS_STYLE: Record<
     icon: <Target size={14} className="text-blue-500 flex-shrink-0 animate-pulse" />,
   },
   pending: {
-    bg: 'bg-gray-50/50',
-    border: 'border-l-gray-300',
-    text: 'text-gray-400',
-    icon: <Lock size={12} className="text-gray-400 flex-shrink-0" />,
+    bg: 'bg-white',
+    border: 'border-l-transparent',
+    text: 'text-gray-600',
+    icon: null,
   },
   unlocked: {
     bg: 'bg-white',
@@ -66,19 +65,19 @@ const STATUS_STYLE: Record<
     icon: null,
   },
   none: {
-    bg: 'bg-gray-50/30',
-    border: 'border-l-gray-200',
-    text: 'text-gray-400',
-    icon: <Lock size={12} className="text-gray-300 flex-shrink-0" />,
+    bg: 'bg-white',
+    border: 'border-l-transparent',
+    text: 'text-gray-600',
+    icon: null,
   },
 }
 
 const STATUS_LABEL: Record<RoadmapNodeStatus, string> = {
   done: '已掌握',
   active: '学习中',
-  pending: '待解锁',
+  pending: '待学习',
   unlocked: '可学习',
-  none: '未解锁',
+  none: '未开始',
 }
 
 // "其他"子分类判断
@@ -331,7 +330,6 @@ const KnowledgeTree: React.FC = () => {
     const meta = isRoot ? CATEGORY_META[node.name.replace('分类', '')] : null
     const Icon = meta?.icon || BookOpen
     const style = STATUS_STYLE[node.status]
-    const isClickable = node.status !== 'pending' && node.status !== 'none'
     const isOther = isOtherCategory(node.name)
 
     const lecCount = node.lecture_count || 0
@@ -365,10 +363,10 @@ const KnowledgeTree: React.FC = () => {
             <span className="flex-shrink-0 w-5" />
           )}
 
-          {/* 状态图标 / 分类图标 */}
+          {/* 状态图标 / 分类图标 / 难度圆点 */}
           {isRoot ? (
             <Icon size={16} className={`flex-shrink-0 ${meta?.color || 'text-gray-500'}`} />
-          ) : node.status !== 'unlocked' ? (
+          ) : style.icon ? (
             <span className="flex-shrink-0">{style.icon}</span>
           ) : (
             <span
@@ -387,7 +385,7 @@ const KnowledgeTree: React.FC = () => {
             >
               {node.name}
             </button>
-          ) : isClickable ? (
+          ) : (
             <Link
               to={`/knowledge/${node.id}`}
               className={`truncate text-sm flex-1 text-left ${style.text} hover:text-blue-600`}
@@ -395,10 +393,6 @@ const KnowledgeTree: React.FC = () => {
             >
               {node.name}
             </Link>
-          ) : (
-            <span className={`truncate text-sm flex-1 text-left ${style.text}`} title={node.name}>
-              {node.name}
-            </span>
           )}
 
           {/* 根节点：分类级进度条 */}
@@ -623,7 +617,7 @@ const KnowledgeTree: React.FC = () => {
                   { key: 'active', label: '学习中' },
                   { key: 'unlocked', label: '可学习' },
                   { key: 'done', label: '已掌握' },
-                  { key: 'none', label: '未解锁' },
+                  { key: 'none', label: '未开始' },
                 ] as const
               ).map((tab) => (
                 <button
@@ -664,9 +658,6 @@ const KnowledgeTree: React.FC = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <Target size={14} className="text-blue-500" /> 学习中
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Lock size={12} className="text-gray-400" /> 待解锁
             </div>
             <span className="text-gray-300">|</span>
             <div className="flex items-center gap-1.5">
