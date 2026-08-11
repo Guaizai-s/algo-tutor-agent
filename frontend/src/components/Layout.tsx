@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   CalendarCheck,
+  UserCircle,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useState } from 'react'
@@ -48,7 +49,11 @@ const Layout: React.FC = () => {
         } bg-white border-r border-gray-200 transition-all duration-300 flex flex-col fixed h-full z-20`}
       >
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          {sidebarOpen && <h1 className="text-xl font-bold text-blue-600">算法教练</h1>}
+          {sidebarOpen && (
+            <Link to="/dashboard" className="text-xl font-bold text-blue-600 hover:text-blue-700 transition-colors">
+              算法教练
+            </Link>
+          )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 hover:bg-gray-100 rounded-lg"
@@ -77,17 +82,39 @@ const Layout: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+          <Link
+            to="/profile"
+            className="flex items-center gap-3 mb-3 rounded-lg hover:bg-gray-100 transition-colors -mx-1 px-1 py-1"
+          >
+            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold flex-shrink-0">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 truncate">{user?.username}</p>
-                <p className="text-sm text-gray-500 truncate">{user?.email}</p>
+                <p className="text-sm text-gray-500 truncate">
+                  {user?.cf_handle ? (
+                    <span className="text-green-600">CF: {user.cf_handle}</span>
+                  ) : (
+                    <span className="text-orange-500">未绑定 CF</span>
+                  )}
+                </p>
               </div>
             )}
-          </div>
+          </Link>
+          {sidebarOpen && (
+            <Link
+              to="/profile"
+              className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg transition-colors mb-1 ${
+                location.pathname === '/profile'
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <UserCircle size={20} />
+              <span>个人档案</span>
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 w-full px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"

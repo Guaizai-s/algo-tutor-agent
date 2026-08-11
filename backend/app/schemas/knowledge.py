@@ -29,6 +29,8 @@ class LectureRead(BaseSchema):
     level: LectureLevel
     title: str
     content: str
+    source: str = "oi_wiki"
+    rewrite_version: int = 1
 
 
 class CodeTemplateRead(BaseSchema):

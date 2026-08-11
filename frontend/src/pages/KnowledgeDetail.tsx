@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   BookOpen,
@@ -14,8 +14,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import rehypeHighlight from 'rehype-highlight'
-import 'highlight.js/styles/github-dark.css'
+import { codeToHtml } from 'shiki/bundle/web'
+import 'katex/dist/katex.min.css'
 import { knowledgeApi } from '../utils/api'
 import type { CodeTemplate, KnowledgePoint, Lecture } from '../types'
 
@@ -36,21 +36,19 @@ const ADMONITION_META: Record<string, { emoji: string; defaultTitle: string }> =
   quote: { emoji: '💬', defaultTitle: '引用' },
 }
 
-// 把 mkdocs admonition 语法转成标准 markdown blockquote
+// 把 mkdocs admonition 语法转成 Obsidian 风格 callout blockquote
 // 输入形如：
 //   ???+ warning "注意"
 //       作为项目方针的一部分...
 //       多行内容...
 //   ## 下一个标题
 // 输出：
-//   > ⚠️ **注意**
+//   > [!WARNING] 注意
 //   >
 //   > 作为项目方针的一部分...
 //   > 多行内容...
 //   ## 下一个标题
 function preprocessAdmonition(md: string): string {
-  // 匹配：??? / ???+ 后跟类型名，可选 "标题"，然后是 4 空格缩进的块体
-  // 直到遇到非缩进行或文档结束
   const lines = md.split('\n')
   const out: string[] = []
   let i = 0
@@ -62,9 +60,8 @@ function preprocessAdmonition(md: string): string {
       i++
       continue
     }
-    const type = m[2].toLowerCase()
-    const title = m[3] || ADMONITION_META[type]?.defaultTitle || type
-    const meta = ADMONITION_META[type] || { emoji: '📌' }
+    const type = m[2].toUpperCase()
+    const title = m[3] || ADMONITION_META[type.toLowerCase()]?.defaultTitle || type
     // 收集缩进体（4 空格或 tab）
     const body: string[] = []
     i++
@@ -74,8 +71,6 @@ function preprocessAdmonition(md: string): string {
         body.push(l.replace(/^( {4}|\t)/, ''))
         i++
       } else if (l.trim() === '') {
-        // 空行允许，但如果是连续空行且后面无缩进，结束块
-        // 简单处理：检查下一行是否仍缩进
         const next = lines[i + 1]
         if (next && (next.startsWith('    ') || next.startsWith('\t'))) {
           body.push('')
@@ -87,11 +82,13 @@ function preprocessAdmonition(md: string): string {
         break
       }
     }
-    // 输出为 blockquote
-    out.push(`> ${meta.emoji} **${title}**`)
+    // 先处理 body 内的 content tabs，再加上 > 前缀
+    const processedBody = preprocessTabs(body.join('\n'))
+    const bodyLines = processedBody.split('\n')
+    out.push(`> [!${type}] ${title}`)
     out.push('>')
-    body.forEach((b) => out.push(b ? `> ${b}` : '>'))
-    out.push('') // 块后空行
+    bodyLines.forEach((b) => out.push(b ? `> ${b}` : '>'))
+    out.push('')
   }
   return out.join('\n')
 }
@@ -164,8 +161,92 @@ function preprocessTabs(md: string): string {
   return out.join('\n')
 }
 
+// Obsidian 风格 callout 颜色映射
+const CALLOUT_COLORS: Record<string, { border: string; bg: string; text: string }> = {
+  note: { border: '#448aff', bg: '#f0f4ff', text: '#1a3a6b' },
+  info: { border: '#00b0ff', bg: '#e1f5fe', text: '#0d3b66' },
+  tip: { border: '#00bfa5', bg: '#e0f2f1', text: '#004d40' },
+  success: { border: '#00c853', bg: '#e8f5e9', text: '#1b5e20' },
+  warning: { border: '#ff9100', bg: '#fff8e1', text: '#5d3f00' },
+  danger: { border: '#ff1744', bg: '#ffebee', text: '#7f0000' },
+  failure: { border: '#ff5252', bg: '#ffebee', text: '#7f0000' },
+  bug: { border: '#d50000', bg: '#fce4ec', text: '#7f0000' },
+  example: { border: '#7c4dff', bg: '#ede7f6', text: '#311b92' },
+  question: { border: '#64b5f6', bg: '#e3f2fd', text: '#0d3b66' },
+  abstract: { border: '#00acc1', bg: '#e0f7fa', text: '#004d40' },
+  quote: { border: '#9e9e9e', bg: '#fafafa', text: '#424242' },
+}
+
+// 递归提取 React 节点的纯文本内容
+function getTextContent(node: unknown): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return (node as unknown[]).map(getTextContent).join('')
+  if (node && typeof node === 'object' && 'props' in node) {
+    return getTextContent((node as { props: { children?: unknown } }).props.children)
+  }
+  return ''
+}
+
+// Obsidian 风格 callout 渲染组件
+const CalloutBlock: React.FC<{
+  type: string
+  title: string
+  children: React.ReactNode
+}> = ({ type, title, children }) => {
+  const t = type.toLowerCase()
+  const colors = CALLOUT_COLORS[t] || CALLOUT_COLORS.note
+  const meta = ADMONITION_META[t] || { emoji: '📌' }
+  return (
+    <div
+      className="my-4 rounded-r-lg border-l-4 p-4"
+      style={{
+        borderLeftColor: colors.border,
+        backgroundColor: colors.bg,
+      }}
+    >
+      <div className="flex items-center gap-2 font-semibold mb-2" style={{ color: colors.border }}>
+        <span>{meta.emoji}</span>
+        <span>{title}</span>
+      </div>
+      <div className="callout-body text-sm leading-relaxed" style={{ color: colors.text }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// 异步 Shiki 代码高亮组件（带行号）
+const ShikiCodeBlock: React.FC<{ code: string; lang: string }> = ({ code, lang }) => {
+  const [html, setHtml] = useState<string>('')
+
+  useEffect(() => {
+    let cancelled = false
+    codeToHtml(code, {
+      lang: lang || 'text',
+      theme: 'github-dark',
+    }).then((h) => {
+      if (!cancelled) setHtml(h)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [code, lang])
+
+  if (!html) {
+    return (
+      <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+        <code>{code}</code>
+      </pre>
+    )
+  }
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />
+}
+
 const KnowledgeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [knowledge, setKnowledge] = useState<KnowledgePoint | null>(null)
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [templates, setTemplates] = useState<CodeTemplate[]>([])
@@ -175,37 +256,68 @@ const KnowledgeDetail: React.FC = () => {
   const [activeLevel, setActiveLevel] = useState<'card' | 'standard' | 'deep'>('card')
   const [copiedTpl, setCopiedTpl] = useState<string | null>(null)
 
+  // UUID 格式校验
+  const isUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+
   useEffect(() => {
     if (!id) return
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([
-      knowledgeApi.getById(id),
-      knowledgeApi.getLectures(id),
-      knowledgeApi.getTemplates(id),
-      knowledgeApi.getPrerequisites(id),
-    ])
-      .then(([kpResp, lecResp, tplResp, preResp]) => {
-        if (cancelled) return
-        setKnowledge(kpResp.data as KnowledgePoint)
-        const lecs = lecResp.data as Lecture[]
-        setLectures(lecs)
-        setTemplates(tplResp.data as CodeTemplate[])
-        setPrerequisites(preResp.data as KnowledgePoint[])
-        if (lecs.length > 0) {
-          setActiveLevel(lecs[0].level)
-        }
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : '加载知识点失败')
-      })
-      .finally(() => !cancelled && setLoading(false))
+
+    const loadByKpId = (kpId: string) => {
+      Promise.all([
+        knowledgeApi.getById(kpId),
+        knowledgeApi.getLectures(kpId),
+        knowledgeApi.getTemplates(kpId),
+        knowledgeApi.getPrerequisites(kpId),
+      ])
+        .then(([kpResp, lecResp, tplResp, preResp]) => {
+          if (cancelled) return
+          setKnowledge(kpResp.data as KnowledgePoint)
+          const lecs = lecResp.data as Lecture[]
+          setLectures(lecs)
+          setTemplates(tplResp.data as CodeTemplate[])
+          setPrerequisites(preResp.data as KnowledgePoint[])
+          if (lecs.length > 0) {
+            setActiveLevel(lecs[0].level)
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return
+          setError(err instanceof Error ? err.message : '加载知识点失败')
+        })
+        .finally(() => !cancelled && setLoading(false))
+    }
+
+    if (isUUID(id)) {
+      loadByKpId(id)
+    } else {
+      // id 不是 UUID，尝试按 slug 查找
+      knowledgeApi.getTree()
+        .then((resp) => {
+          if (cancelled) return
+          const items = resp.data as KnowledgePoint[]
+          const found = items.find((kp) => kp.slug === id)
+          if (found) {
+            // 重定向到 UUID 版本，避免后续重复查找
+            navigate(`/knowledge/${found.id}`, { replace: true })
+          } else {
+            setError(`知识点 "${id}" 不存在`)
+            setLoading(false)
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return
+          setError(err instanceof Error ? err.message : '加载知识点失败')
+          setLoading(false)
+        })
+    }
+
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, navigate])
 
   const levels: {
     level: 'card' | 'standard' | 'deep'
@@ -330,7 +442,42 @@ const KnowledgeDetail: React.FC = () => {
               <article className="prose prose-slate max-w-none prose-headings:font-semibold prose-code:before:hidden prose-code:after:hidden prose-pre:p-4 prose-pre:rounded-lg">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[[rehypeHighlight, { detect: true }], rehypeKatex]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    pre({ children }) {
+                      return <>{children}</>
+                    },
+                    code({ children, className, ...props }) {
+                      if (!className) {
+                        return <code className={className} {...props}>{children}</code>
+                      }
+                      const lang = className.replace('language-', '')
+                      const code = String(children).replace(/\n$/, '')
+                      return <ShikiCodeBlock code={code} lang={lang} />
+                    },
+                    blockquote({ children, ...props }) {
+                      const childrenArr = Array.isArray(children) ? children : [children]
+                      // 跳过空白文本节点，找到第一个真正的 React 元素
+                      const firstIdx = childrenArr.findIndex(
+                        (c) => c && typeof c === 'object' && 'props' in c
+                      )
+                      const firstChild = firstIdx >= 0 ? childrenArr[firstIdx] : undefined
+                      if (firstChild) {
+                        const text = getTextContent(firstChild)
+                        const match = text.match(/^\[!(\w+)\]\s*(.*)/)
+                        if (match) {
+                          const type = match[1]
+                          const title = match[2] || ADMONITION_META[type.toLowerCase()]?.defaultTitle || type
+                          return (
+                            <CalloutBlock type={type} title={title}>
+                              {childrenArr.slice(firstIdx + 1)}
+                            </CalloutBlock>
+                          )
+                        }
+                      }
+                      return <blockquote {...props}>{children}</blockquote>
+                    },
+                  }}
                 >
                   {preprocessTabs(preprocessAdmonition(currentLecture.content))}
                 </ReactMarkdown>

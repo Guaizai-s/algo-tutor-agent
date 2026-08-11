@@ -4,10 +4,18 @@ import type {
   AgentChatResponse,
   AttemptRequest,
   AttemptResponse,
+  BindCFRequest,
+  BindCFResponse,
   CodeExecutionResult,
+  ColdStartResultResponse,
   DailyTaskTodayResponse,
   LearningPathGenerateRequest,
   LearningPathRead,
+  MarkMasteredRequest,
+  MarkMasteredResponse,
+  ProfileUpdateRequest,
+  RoadmapResponse,
+  User,
 } from '../types'
 
 const api = axios.create({
@@ -43,7 +51,9 @@ export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   register: (email: string, username: string, password: string) =>
     api.post('/auth/register', { email, username, password }),
-  getProfile: () => api.get('/auth/me'),
+  getProfile: () => api.get<User>('/auth/me'),
+  updateProfile: (data: ProfileUpdateRequest) => api.patch<User>('/auth/profile', data),
+  bindCF: (data: BindCFRequest) => api.post<BindCFResponse>('/auth/bind-cf', data),
 }
 
 export const knowledgeApi = {
@@ -76,24 +86,31 @@ export const agentApi = {
 
 export const progressApi = {
   getOverview: (userId: string) => api.get('/progress/overview', { params: { user_id: userId } }),
-  getWrongAnswers: () => api.get('/progress/wrong-answers'),
+  getActivity: (userId: string, days = 30) =>
+    api.get('/progress/activity', { params: { user_id: userId, days } }),
+  getWrongAnswers: () => api.get('/progress/wrong-answers', { params: { user_id: DEV_USER_ID } }),
   recomputeMastery: (userId: string, knowledgeId?: string) =>
     api.post('/progress/recompute', { user_id: userId, knowledge_id: knowledgeId ?? null }),
 }
 
 export const reviewApi = {
-  getList: () => api.get('/review/list'),
+  getList: () => api.get('/review/list', { params: { user_id: DEV_USER_ID } }),
+  getStatus: () => api.get('/review/status', { params: { user_id: DEV_USER_ID } }),
   submitReview: (id: string, correct: boolean) => api.post(`/review/${id}/submit`, { correct }),
 }
 
 export const notificationApi = {
-  list: () => api.get('/notifications'),
-  markAsRead: (id: string) => api.post(`/notifications/${id}/read`),
-  markAllAsRead: () => api.post('/notifications/read-all'),
+  list: () => api.get('/notifications', { params: { user_id: DEV_USER_ID } }),
+  markAsRead: (id: string) => api.post(`/notifications/${id}/read`, null, { params: { user_id: DEV_USER_ID } }),
+  markAllAsRead: () => api.post('/notifications/read-all', null, { params: { user_id: DEV_USER_ID } }),
+  getRecommendations: (userId: string) =>
+    api.get('/notifications/recommendations', { params: { user_id: userId } }),
 }
 
 export const discussionApi = {
   getSolutions: (problemId: string) => api.get(`/problems/${problemId}/solutions`),
+  /** 全局题解列表（讨论区首页）。 */
+  getGlobalSolutions: () => api.get('/solutions'),
   getSolutionById: (id: string) => api.get(`/solutions/${id}`),
   createSolution: (problemId: string, data: { title: string; content: string; language: string }) =>
     api.post(`/problems/${problemId}/solutions`, data),
@@ -119,9 +136,21 @@ export const learningApi = {
   /** 获取当前 active 学习路径。 */
   getCurrentPath: (userId: string) =>
     api.get<LearningPathRead>('/learning-paths/current', { params: { user_id: userId } }),
+  /** 获取路线图聚合数据：知识树 + 用户学习状态。 */
+  getRoadmap: (userId: string) =>
+    api.get<RoadmapResponse>('/learning-paths/roadmap', { params: { user_id: userId } }),
   /** 记录一次做题结果，触发路径动态调整。 */
   recordAttempt: (req: AttemptRequest) =>
     api.post<AttemptResponse>('/learning-paths/attempts', req),
+  /** 标记知识点为已掌握（自评），跳过路径中对应项。 */
+  markMastered: (req: MarkMasteredRequest) =>
+    api.post<MarkMasteredResponse>('/learning-paths/mark-mastered', req),
+}
+
+export const coldstartApi = {
+  /** CF 冷启动：拉取 CF 提交记录，映射知识点。 */
+  cfColdStart: (userId: string) =>
+    api.post<ColdStartResultResponse>('/coldstart/cf', null, { params: { user_id: userId } }),
 }
 
 export const dailyTaskApi = {

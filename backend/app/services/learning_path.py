@@ -16,12 +16,12 @@ import logging
 from collections import defaultdict, deque
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.knowledge import KnowledgePoint, KnowledgePrerequisite
+from app.models.knowledge import CodeTemplate, KnowledgePoint, KnowledgePrerequisite, Lecture
 from app.models.learning import (
     CONSECUTIVE_WA_THRESHOLD,
     MASTERY_THRESHOLD,
@@ -36,6 +36,8 @@ from app.schemas.learning import (
     KnowledgePointRef,
     LearningPathItemRead,
     LearningPathRead,
+    RoadmapKnowledgeNode,
+    RoadmapResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,6 +201,59 @@ async def generate_learning_path(
     await db.flush()
 
     return await _build_path_read(db, path)
+
+
+async def mark_knowledge_mastered(
+    db: AsyncSession,
+    user_id: UUID,
+    knowledge_id: UUID,
+) -> tuple[float, int]:
+    """标记知识点为已掌握（自评），并跳过路径中对应项。
+
+    - 将 UserKnowledgeState.mastery 设为 1.0，清除 is_weak
+    - 将当前 active 路径中该知识点的项标记为 SKIPPED
+    - 返回 (mastery, skipped_count)
+    """
+    # 1. Upsert UserKnowledgeState
+    stmt = select(UserKnowledgeState).where(
+        UserKnowledgeState.user_id == user_id,
+        UserKnowledgeState.knowledge_id == knowledge_id,
+    )
+    state = (await db.execute(stmt)).scalar_one_or_none()
+    if state is None:
+        state = UserKnowledgeState(
+            user_id=user_id,
+            knowledge_id=knowledge_id,
+            mastery=1.0,
+            is_weak=False,
+            consecutive_wa=0,
+        )
+        db.add(state)
+    else:
+        state.mastery = 1.0
+        state.is_weak = False
+        state.consecutive_wa = 0
+    await db.flush()
+
+    # 2. 标记当前 active 路径中对应项为 SKIPPED
+    skipped = 0
+    path_stmt = (
+        select(LearningPath)
+        .where(LearningPath.user_id == user_id, LearningPath.is_active.is_(True))
+        .options(selectinload(LearningPath.items))
+    )
+    path = (await db.execute(path_stmt)).scalar_one_or_none()
+    if path is not None:
+        for item in path.items:
+            if item.knowledge_id == knowledge_id and item.status != PathItemStatus.SKIPPED:
+                item.status = PathItemStatus.SKIPPED
+                skipped += 1
+        if skipped > 0:
+            await db.flush()
+            # 解锁后续 pending 项
+            await _unlock_pending_items(db, user_id)
+
+    return 1.0, skipped
 
 
 async def get_current_learning_path(db: AsyncSession, user_id: UUID) -> LearningPathRead | None:
@@ -506,3 +561,138 @@ async def _insert_or_promote_remediation(
         it.position += 1
     await db.flush()
     return True
+
+
+# ===== Roadmap view (路线图视图) =====
+
+
+async def get_roadmap_data(
+    db: AsyncSession,
+    user_id: UUID,
+    preview_count: int = 8,
+) -> RoadmapResponse:
+    """获取路线图聚合数据：知识树 + 用户学习状态。
+
+    Returns:
+        RoadmapResponse 包含所有知识点（带状态）和路径预览。
+        若用户无学习路径，has_path=False，所有节点 status 均为 "none"。
+    """
+    # 1. 加载所有知识点
+    kp_map, adj = await _load_dag(db)
+
+    # 2. 加载 lecture_count / template_count
+    kp_ids = list(kp_map.keys())
+    lec_stats = (
+        await db.execute(
+            select(Lecture.knowledge_id, func.count(Lecture.id))
+            .where(Lecture.knowledge_id.in_(kp_ids))
+            .group_by(Lecture.knowledge_id)
+        )
+    ).all()
+    tpl_stats = (
+        await db.execute(
+            select(CodeTemplate.knowledge_id, func.count(CodeTemplate.id))
+            .where(CodeTemplate.knowledge_id.in_(kp_ids))
+            .group_by(CodeTemplate.knowledge_id)
+        )
+    ).all()
+    lec_map = {kid: cnt for kid, cnt in lec_stats}
+    tpl_map = {kid: cnt for kid, cnt in tpl_stats}
+
+    # 3. 加载用户状态
+    user_states = await _load_user_states(db, user_id)
+
+    # 4. 加载用户当前学习路径
+    path_stmt = (
+        select(LearningPath)
+        .where(LearningPath.user_id == user_id, LearningPath.is_active.is_(True))
+        .options(selectinload(LearningPath.items))
+    )
+    path = (await db.execute(path_stmt)).scalar_one_or_none()
+    has_path = path is not None
+
+    # 构建路径项索引：knowledge_id → LearningPathItem
+    path_item_map: dict[UUID, LearningPathItem] = {}
+    if path is not None:
+        for it in path.items:
+            path_item_map[it.knowledge_id] = it
+
+    # 5. 构建前置依赖反向索引
+    prereq_map: dict[UUID, list[UUID]] = defaultdict(list)
+    for src, dsts in adj.items():
+        for d in dsts:
+            prereq_map[d].append(src)
+
+    # 6. 已掌握知识点集合
+    mastered_set: set[UUID] = set()
+    for kid, st in user_states.items():
+        if st.mastery >= MASTERY_THRESHOLD and not st.is_weak:
+            mastered_set.add(kid)
+
+    # 7. 为每个知识点计算状态
+    tree_nodes: list[RoadmapKnowledgeNode] = []
+    for kid, kp in kp_map.items():
+        st = user_states.get(kid)
+        path_item = path_item_map.get(kid)
+
+        # 计算 status
+        if st and st.mastery >= MASTERY_THRESHOLD and not st.is_weak:
+            status = "done"
+        elif path_item is not None and path_item.status == PathItemStatus.ACTIVE:
+            status = "active"
+        elif path_item is not None and path_item.status == PathItemStatus.PENDING:
+            status = "pending"
+        elif not has_path:
+            status = "none"
+        else:
+            prereqs = prereq_map.get(kid, [])
+            if all(p in mastered_set for p in prereqs):
+                status = "unlocked"
+            else:
+                status = "none"
+
+        tree_nodes.append(
+            RoadmapKnowledgeNode(
+                id=kid,
+                name=kp.name,
+                slug=kp.slug,
+                parent_id=kp.parent_id,
+                difficulty=kp.difficulty.value,
+                order=kp.order,
+                lecture_count=lec_map.get(kid, 0),
+                template_count=tpl_map.get(kid, 0),
+                status=status,
+                mastery=st.mastery if st else None,
+                is_weak=st.is_weak if st else False,
+                path_position=path_item.position if path_item else None,
+            )
+        )
+
+    # 8. 构建路径预览（拓扑排序前 N 个）
+    path_preview: list[KnowledgePointRef] = []
+    if has_path:
+        try:
+            topo = topological_sort(kp_map, adj)
+        except CycleDetectedError:
+            logger.warning("knowledge prerequisite graph has a cycle, skipping path preview")
+        else:
+            for kid in topo:
+                st = user_states.get(kid)
+                if st and st.mastery >= MASTERY_THRESHOLD and not st.is_weak:
+                    continue
+                if len(path_preview) >= preview_count:
+                    break
+                path_preview.append(
+                    KnowledgePointRef(
+                        id=kp_map[kid].id,
+                        name=kp_map[kid].name,
+                        slug=kp_map[kid].slug,
+                    )
+                )
+
+    return RoadmapResponse(
+        user_id=user_id,
+        has_path=has_path,
+        tree=tree_nodes,
+        path_preview=path_preview,
+    )

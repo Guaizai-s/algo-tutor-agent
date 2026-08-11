@@ -1,3 +1,5 @@
+export type TargetMedal = 'bronze' | 'silver' | 'gold'
+
 export interface User {
   id: string
   email: string
@@ -7,7 +9,7 @@ export interface User {
   school: string | null
   cf_handle: string | null
   atcoder_handle: string | null
-  target_medal: 'bronze' | 'silver' | 'gold' | null
+  target_medal: TargetMedal | null
   created_at: string
   updated_at: string
 }
@@ -38,6 +40,9 @@ export interface Problem {
   description: string
   difficulty: Difficulty
   status: 'draft' | 'published'
+  source?: 'platform' | 'codeforces' | 'atcoder' | 'user_reported' | null
+  external_url?: string | null
+  cf_tags?: string[] | null
   time_limit_ms: number
   memory_limit_kb: number
   sample_input?: string | null
@@ -65,6 +70,8 @@ export interface Lecture {
   level: 'card' | 'standard' | 'deep'
   title: string
   content: string
+  source?: string
+  rewrite_version?: number
 }
 
 export interface CodeTemplate {
@@ -120,12 +127,14 @@ export interface WrongAnswer {
 
 export interface Notification {
   id: string
-  type: 'review' | 'push' | 'system'
+  notification_type: 'review_reminder' | 'daily_task' | 'path_update' | 'remediation' | 'system'
   title: string
-  content: string
+  body: string
   is_read: boolean
+  read_at: string | null
   created_at: string
-  link?: string
+  related_knowledge_id?: string | null
+  related_problem_id?: string | null
 }
 
 export interface ReviewItem {
@@ -162,6 +171,8 @@ export interface MasteryByCategory {
   /** 知识点 ID，用于映射 weak_knowledge_ids */
   knowledge_id: string
   name: string
+  /** 一级父分类名称，用于分组展示 */
+  parent_name: string | null
   /** mastery 百分比 0-100 */
   value: number
 }
@@ -195,12 +206,51 @@ export interface Progress {
   target_progress: TargetProgress | null
   /** 薄弱知识点 ID 列表（0 < mastery < 0.5；mastery=0 未学不算薄弱） */
   weak_knowledge_ids: string[]
+  /** 艾宾浩斯复习状态概览 */
+  review_status: ReviewStatus | null
+}
+
+export interface ReviewStatus {
+  due_count: number
+  total_records: number
+  completed: number
+}
+
+export interface ActivityDay {
+  date: string
+  count: number
+}
+
+export interface ActivityResponse {
+  user_id: string
+  days: ActivityDay[]
+  total_week: number
+  total_last_week: number
 }
 
 export interface AuthResponse {
   access_token: string
   token_type: string
   user: User
+}
+
+export interface BindCFRequest {
+  handle: string
+}
+
+export interface BindCFResponse {
+  handle: string
+  current_rating: number | null
+  max_rating: number | null
+  rank: string | null
+  message: string
+}
+
+export interface ProfileUpdateRequest {
+  school?: string | null
+  cf_handle?: string | null
+  atcoder_handle?: string | null
+  target_medal?: TargetMedal | null
 }
 
 export interface Hint {
@@ -334,6 +384,28 @@ export interface AttemptResponse {
   remediation_inserted: boolean
 }
 
+export interface MarkMasteredRequest {
+  user_id: string
+  knowledge_id: string
+}
+
+export interface MarkMasteredResponse {
+  knowledge_id: string
+  mastery: number
+  items_skipped: number
+}
+
+export interface ColdStartResultResponse {
+  user_id: string
+  method: string
+  target_rating_min: number
+  target_rating_max: number
+  mastered_count: number
+  weak_count: number
+  next_available_count: number
+  diagnostic_problems: string[]
+}
+
 export interface DailyTaskItemRead {
   id: string
   item_type: DailyTaskItemType
@@ -364,4 +436,60 @@ export interface DailyTaskPathPreviewItem {
 export interface DailyTaskTodayResponse {
   task: DailyTaskRead
   path_preview: DailyTaskPathPreviewItem[]
+}
+
+export interface DailyTaskItemUpdateResponse {
+  item: DailyTaskItemRead
+  task_done: number
+  task_total: number
+  all_done: boolean
+  check_in: boolean
+}
+
+// ===== Roadmap (路线图视图) =====
+
+export type RoadmapNodeStatus = 'done' | 'active' | 'pending' | 'unlocked' | 'none'
+
+export interface RoadmapKnowledgeNode {
+  id: string
+  name: string
+  slug: string
+  parent_id: string | null
+  difficulty: string
+  order: number
+  lecture_count: number
+  template_count: number
+  status: RoadmapNodeStatus
+  mastery: number | null
+  is_weak: boolean
+  path_position: number | null
+}
+
+export interface RoadmapResponse {
+  user_id: string
+  has_path: boolean
+  tree: RoadmapKnowledgeNode[]
+  path_preview: KnowledgePointRef[]
+}
+
+// ===== Recommendations =====
+
+export interface RecommendationProblem {
+  problem_id: string
+  title: string
+  slug: string
+  difficulty: string
+  cf_rating: number | null
+}
+
+export interface RecommendationItem {
+  knowledge_id: string
+  knowledge_name: string
+  mastery: number
+  problems: RecommendationProblem[]
+}
+
+export interface RecommendationResponse {
+  user_id: string
+  items: RecommendationItem[]
 }

@@ -9,13 +9,20 @@ import {
   TrendingUp,
   CheckCircle2,
   AlertCircle,
+  Link2,
+  ExternalLink,
+  Zap,
 } from 'lucide-react'
-import { progressApi, DEV_USER_ID } from '../utils/api'
-import type { Progress } from '../types'
+import { progressApi, notificationApi, DEV_USER_ID } from '../utils/api'
+import { useAuthStore } from '../stores/authStore'
+import type { Progress, RecommendationResponse } from '../types'
 
 const Dashboard: React.FC = () => {
   const [progress, setProgress] = useState<Progress | null>(null)
   const [progressError, setProgressError] = useState<string | null>(null)
+  const [recommendations, setRecommendations] = useState<RecommendationResponse | null>(null)
+  const { user } = useAuthStore()
+  const cfBound = !!user?.cf_handle
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +37,19 @@ const Dashboard: React.FC = () => {
         const msg = err instanceof Error ? err.message : '进度数据暂不可用'
         setProgressError(msg)
       })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    notificationApi
+      .getRecommendations(DEV_USER_ID)
+      .then((resp) => {
+        if (!cancelled) setRecommendations(resp.data as RecommendationResponse)
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -85,6 +105,56 @@ const Dashboard: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900">欢迎回来！</h1>
         <p className="text-gray-600 mt-2">今天也要加油练习算法哦</p>
       </div>
+
+      {/* CF 绑定状态卡片 */}
+      {cfBound ? (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 flex-shrink-0">
+            <Link2 size={20} />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-green-900">
+              Codeforces 已绑定：
+              <a
+                href={`https://codeforces.com/profile/${user?.cf_handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-700 hover:underline inline-flex items-center gap-1 ml-1"
+              >
+                {user?.cf_handle}
+                <ExternalLink size={14} />
+              </a>
+            </p>
+            <p className="text-sm text-green-700 mt-0.5">
+              系统每 5 分钟自动同步你的 CF 提交记录，AC 的题目会自动计入掌握度。
+            </p>
+          </div>
+          <Link
+            to="/profile"
+            className="text-sm text-green-700 hover:text-green-900 hover:underline flex-shrink-0"
+          >
+            管理 →
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+          <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 flex-shrink-0">
+            <AlertCircle size={20} />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-orange-900">尚未绑定 Codeforces 账号</p>
+            <p className="text-sm text-orange-700 mt-0.5">
+              题库里的题目来自 Codeforces。绑定 CF 账号后，系统才能自动同步你的提交结果与 AC 状态，否则题库无法记录你的练习进度。
+            </p>
+          </div>
+          <Link
+            to="/profile"
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+          >
+            去绑定
+          </Link>
+        </div>
+      )}
 
       {progressError && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3 text-yellow-800">
@@ -203,9 +273,46 @@ const Dashboard: React.FC = () => {
             查看全部 →
           </Link>
         </div>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center text-gray-500">
-          <TrendingUp size={24} className="mx-auto mb-2 text-gray-400" />
-          推荐功能由智能推送引擎（Task 12）提供，暂未启用
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          {!recommendations || recommendations.items.length === 0 ? (
+            <div className="text-center text-gray-500 py-2">
+              <TrendingUp size={24} className="mx-auto mb-2 text-gray-400" />
+              {recommendations === null ? '加载中...' : '暂无推荐，薄弱知识点已全部掌握'}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recommendations.items.map((item) => (
+                <div key={item.knowledge_id}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Zap size={14} className="text-amber-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-gray-800 truncate flex-1" title={item.knowledge_name}>
+                      {item.knowledge_name}
+                    </span>
+                    <span className="text-xs font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
+                      {item.mastery}%
+                    </span>
+                  </div>
+                  <div className="ml-6 space-y-1">
+                    {item.problems.map((p) => (
+                      <Link
+                        key={p.problem_id}
+                        to={`/problems/${p.problem_id}`}
+                        className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        <ExternalLink size={12} className="flex-shrink-0" />
+                        <span className="truncate">{p.title}</span>
+                        {p.cf_rating !== null && (
+                          <span className="text-xs text-gray-400 flex-shrink-0 ml-auto">
+                            *{p.cf_rating}
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

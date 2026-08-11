@@ -13,6 +13,7 @@ from app.models.learning import (
     CONSECUTIVE_WA_THRESHOLD,
     MASTERY_THRESHOLD,
     WEAK_MASTERY_THRESHOLD,
+    CheckIn,
     DailyTask,
     DailyTaskItem,
     DailyTaskItemStatus,
@@ -22,9 +23,12 @@ from app.models.learning import (
     LearningProfile,
     PathItemKind,
     PathItemStatus,
+    ReviewRecord,
+    ReviewStage,
     UserKnowledgeState,
     UserProblemAC,
 )
+from app.models.notification import Notification, NotificationType
 from app.models.problem import (
     Problem,
     ProblemDifficulty,
@@ -78,6 +82,13 @@ __all__ = [
     "TargetMedal",
     # Task 12 错题本
     "WrongBookEntry",
+    # Task 12 智能推送引擎
+    "Notification",
+    "NotificationType",
+    # Task 13 艾宾浩斯复习
+    "CheckIn",
+    "ReviewRecord",
+    "ReviewStage",
     # Task 8 Codeforces
     "CodeforcesAccount",
     "Submission",

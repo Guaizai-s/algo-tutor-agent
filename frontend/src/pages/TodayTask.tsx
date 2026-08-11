@@ -13,24 +13,22 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { dailyTaskApi, learningApi, DEV_USER_ID } from '../utils/api'
-import type { DailyTaskItemRead, DailyTaskTodayResponse } from '../types'
+import type { DailyTaskItemRead, DailyTaskItemUpdateResponse, DailyTaskTodayResponse } from '../types'
 
 const TodayTask: React.FC = () => {
   const [data, setData] = useState<DailyTaskTodayResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [regenerating, setRegenerating] = useState(false)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
 
   const loadAll = async () => {
     setLoading(true)
     setError(null)
     try {
-      // 先确保存在路径，再拉今日任务
       try {
         await learningApi.getCurrentPath(DEV_USER_ID)
       } catch (err: unknown) {
-        // 仅在明确收到 404（路径不存在）时才生成新路径；
-        // 网络/500/鉴权错误不应该归档正常路径。
         const status = (err as { response?: { status?: number } })?.response?.status
         if (status !== 404) {
           throw err
@@ -42,6 +40,10 @@ const TodayTask: React.FC = () => {
       }
       const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
       setData(todayResp.data)
+      // 从服务器数据初始化进度
+      const items = todayResp.data.task.items
+      const done = items.filter((i) => i.status === 'done').length
+      setProgress({ done, total: items.length })
     } catch (err: unknown) {
       const msg =
         err instanceof Error && err.message
@@ -57,6 +59,32 @@ const TodayTask: React.FC = () => {
     loadAll()
   }, [])
 
+  const handleToggleItem = async (item: DailyTaskItemRead) => {
+    if (!data) return
+    const newStatus = item.status === 'done' ? 'skipped' : 'done'
+    try {
+      const resp = await dailyTaskApi.updateItem(data.task.id, item.id, newStatus)
+      const result = resp.data as DailyTaskItemUpdateResponse
+      // 更新本地 item 状态
+      setData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          task: {
+            ...prev.task,
+            items: prev.task.items.map((i) =>
+              i.id === item.id ? result.item : i
+            ),
+          },
+        }
+      })
+      setProgress({ done: result.task_done, total: result.task_total })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '更新任务状态失败'
+      setError(msg)
+    }
+  }
+
   const handleRegenerate = async () => {
     setRegenerating(true)
     setError(null)
@@ -67,6 +95,9 @@ const TodayTask: React.FC = () => {
       })
       const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
       setData(todayResp.data)
+      const items = todayResp.data.task.items
+      const done = items.filter((i) => i.status === 'done').length
+      setProgress({ done, total: items.length })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '重新生成学习路径失败'
       setError(msg)
@@ -142,6 +173,37 @@ const TodayTask: React.FC = () => {
         </button>
       </div>
 
+      {/* 进度条 */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm text-gray-600">
+            已完成 {progress.done} / {progress.total} 项
+          </span>
+          <span className="text-sm font-semibold text-gray-900">
+            {progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}%
+          </span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-green-500 rounded-full transition-all duration-500"
+            style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 全部完成庆祝 */}
+      {progress.done === progress.total && progress.total > 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6 flex items-center gap-4">
+          <CheckCircle2 className="text-green-500 flex-shrink-0" size={28} />
+          <div>
+            <p className="font-semibold text-green-800">今日任务全部完成!</p>
+            <p className="text-sm text-green-600 mt-1">
+              已自动打卡，明天继续加油
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 当前知识点 */}
       <div
         className={`rounded-xl p-6 shadow-sm border ${
@@ -197,7 +259,7 @@ const TodayTask: React.FC = () => {
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">今日任务清单</h2>
         {task.items.map((item) => (
-          <TaskItemCard key={item.id} item={item} />
+          <TaskItemCard key={item.id} item={item} onToggle={() => handleToggleItem(item)} />
         ))}
       </div>
 
@@ -218,7 +280,7 @@ const TodayTask: React.FC = () => {
   )
 }
 
-const TaskItemCard: React.FC<{ item: DailyTaskItemRead }> = ({ item }) => {
+const TaskItemCard: React.FC<{ item: DailyTaskItemRead; onToggle: () => void }> = ({ item, onToggle }) => {
   const isLecture = item.item_type === 'lecture_card'
   const isDone = item.status === 'done'
   const isMissing = !item.lecture && !item.problem
@@ -231,7 +293,7 @@ const TaskItemCard: React.FC<{ item: DailyTaskItemRead }> = ({ item }) => {
     <div
       className={`bg-white rounded-xl p-5 shadow-sm border flex items-center justify-between ${
         isMissing ? 'border-yellow-200 bg-yellow-50/50' : 'border-gray-100'
-      }`}
+      } ${isDone ? 'opacity-70' : ''}`}
     >
       <div className="flex items-center gap-4 flex-1 min-w-0">
         <div
@@ -256,19 +318,34 @@ const TaskItemCard: React.FC<{ item: DailyTaskItemRead }> = ({ item }) => {
                 缺失
               </span>
             )}
+            {isDone && (
+              <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                已完成
+              </span>
+            )}
           </div>
-          <p className="font-medium text-gray-900 mt-1 truncate">{title}</p>
+          <p className={`font-medium mt-1 truncate ${isDone ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+            {title}
+          </p>
           {item.missing_reason && (
             <p className="text-xs text-yellow-700 mt-0.5">{item.missing_reason}</p>
           )}
         </div>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
-        {isDone ? (
-          <CheckCircle2 className="text-green-500" size={22} />
-        ) : (
-          <Circle className="text-gray-300" size={22} />
-        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="focus:outline-none"
+          disabled={isMissing}
+          title={isDone ? '标记为未完成' : '标记为已完成'}
+        >
+          {isDone ? (
+            <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={22} />
+          ) : (
+            <Circle className="text-gray-300 hover:text-gray-400 transition-colors" size={22} />
+          )}
+        </button>
         {item.problem && (
           <Link
             to={`/problems/${item.problem.id}`}

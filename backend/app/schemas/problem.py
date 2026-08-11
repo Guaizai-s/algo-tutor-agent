@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.models.problem import ProblemDifficulty, ProblemStatus
+from app.models.problem import ProblemDifficulty, ProblemSource, ProblemStatus
 from app.schemas.common import BaseSchema, PageResponse, TimestampSchema
 
 
@@ -30,6 +30,9 @@ class ProblemRead(TimestampSchema, ProblemBase):
     """公开读取 Schema，显式排除 test_cases。"""
 
     status: ProblemStatus
+    source: ProblemSource | None = None
+    external_url: str | None = None
+    cf_tags: list[str] | None = None
     submit_count: int
     accepted_count: int
     cf_rating: float | None = None

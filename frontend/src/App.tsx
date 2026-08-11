@@ -16,6 +16,7 @@ import Notifications from './pages/Notifications'
 import Discussions from './pages/Discussions'
 import SolutionDetail from './pages/SolutionDetail'
 import TodayTask from './pages/TodayTask'
+import Profile from './pages/Profile'
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="discussions" element={<Discussions />} />
           <Route path="solutions/:id" element={<SolutionDetail />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
     </Router>

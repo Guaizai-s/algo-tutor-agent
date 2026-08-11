@@ -10,6 +10,7 @@ RUN sed -i \
     && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

@@ -6,6 +6,7 @@
 - 排除该用户已 AC 的题目
 - 按 cf_rating ASC 排序，相同 rating 按 created_at, title 稳定次级排序
 - 正确处理 cf_rating IS NULL：未定级题不混入依赖 rating 区间的槽位
+- 候选不足时自动降级到子知识点（递归收集所有后代）
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningProfile, UserProblemAC
 from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
 from app.schemas.learning import ProblemRef
@@ -44,6 +46,28 @@ async def _load_or_create_profile(db: AsyncSession, user_id: UUID) -> LearningPr
     return profile
 
 
+async def _collect_descendant_kp_ids(db: AsyncSession, root_id: UUID) -> list[UUID]:
+    """递归收集某知识点的所有后代知识点 ID（含自身）。
+
+    通过 parent_id 字段递归查找，用于候选不足时扩大搜索范围。
+    """
+    all_kps = (await db.execute(select(KnowledgePoint.id, KnowledgePoint.parent_id))).all()
+    # 构建 parent_id -> [child_id] 映射
+    children_map: dict[UUID, list[UUID]] = {}
+    for kp_id, parent_id in all_kps:
+        if parent_id is not None:
+            children_map.setdefault(parent_id, []).append(kp_id)
+
+    result: list[UUID] = [root_id]
+    stack = [root_id]
+    while stack:
+        current = stack.pop()
+        for child_id in children_map.get(current, []):
+            result.append(child_id)
+            stack.append(child_id)
+    return result
+
+
 async def recommend_problems_by_knowledge(
     db: AsyncSession,
     user_id: UUID,
@@ -53,6 +77,7 @@ async def recommend_problems_by_knowledge(
     limit: int = 10,
     exclude_ac: bool = True,
     require_rating: bool = False,
+    expand_descendants: bool = False,
 ) -> list[Problem]:
     """按知识点查询推荐题目。
 
@@ -63,14 +88,20 @@ async def recommend_problems_by_knowledge(
         limit: 最多返回数量
         exclude_ac: 是否排除已 AC 题目
         require_rating: True 时仅返回 cf_rating NOT NULL 的题（用于 rating 槽位）
+        expand_descendants: True 时同时搜索该知识点所有后代知识点
     """
     ac_ids = await _load_ac_problem_ids(db, user_id) if exclude_ac else set()
+
+    if expand_descendants:
+        kp_ids = await _collect_descendant_kp_ids(db, knowledge_id)
+    else:
+        kp_ids = [knowledge_id]
 
     stmt = (
         select(Problem)
         .join(ProblemKnowledgePoint, ProblemKnowledgePoint.problem_id == Problem.id)
         .where(
-            ProblemKnowledgePoint.knowledge_id == knowledge_id,
+            ProblemKnowledgePoint.knowledge_id.in_(kp_ids),
             Problem.status == ProblemStatus.PUBLISHED,
         )
         .options(selectinload(Problem.knowledge_points))
@@ -111,14 +142,22 @@ async def recommend_for_slots(
     - template: cf_rating <= target_min
     - application: target_min <= cf_rating <= target_max
     - challenge: cf_rating >= target_max
-    - no_rating: cf_rating IS NULL（仅作 fallback，不混入 rating 槽位）
+    - no_rating: cf_rating IS NULL（用于 fallback）
+
+    当目标知识点候选不足时，自动降级到子知识点搜索。
     """
     profile = await _load_or_create_profile(db, user_id)
     tmin = float(profile.target_rating_min)
     tmax = float(profile.target_rating_max)
 
     template = await recommend_problems_by_knowledge(
-        db, user_id, knowledge_id, rating_max=tmin, limit=5, require_rating=True
+        db,
+        user_id,
+        knowledge_id,
+        rating_max=tmin,
+        limit=5,
+        require_rating=True,
+        expand_descendants=True,
     )
     application = await recommend_problems_by_knowledge(
         db,
@@ -128,11 +167,25 @@ async def recommend_for_slots(
         rating_max=tmax,
         limit=5,
         require_rating=True,
+        expand_descendants=True,
     )
     challenge = await recommend_problems_by_knowledge(
-        db, user_id, knowledge_id, rating_min=tmax, limit=5, require_rating=True
+        db,
+        user_id,
+        knowledge_id,
+        rating_min=tmax,
+        limit=5,
+        require_rating=True,
+        expand_descendants=True,
     )
-    no_rating = await recommend_problems_by_knowledge(db, user_id, knowledge_id, limit=5, require_rating=False)
+    no_rating = await recommend_problems_by_knowledge(
+        db,
+        user_id,
+        knowledge_id,
+        limit=10,
+        require_rating=False,
+        expand_descendants=True,
+    )
     # no_rating 查询本身不过滤 require_rating，需手动取 IS NULL 的子集
     no_rating = [p for p in no_rating if p.cf_rating is None]
 

@@ -14,13 +14,15 @@ from app.schemas.common import BaseSchema
 
 
 class MasteryByCategory(BaseModel):
-    """雷达图单项：知识点 ID + 名称 + mastery 百分比（0-100）。
+    """知识点掌握度单项：ID + 名称 + 父分类名 + mastery 百分比（0-100）。
 
     knowledge_id 用于前端映射 weak_knowledge_ids。
+    parent_name 用于前端按一级分类分组展示（替代雷达图）。
     """
 
     knowledge_id: UUID
     name: str
+    parent_name: str | None = Field(default=None, description="一级父分类名称，用于分组展示")
     value: int = Field(..., ge=0, le=100, description="mastery 百分比，0-100")
 
 
@@ -29,6 +31,14 @@ class RatingHistoryPoint(BaseModel):
 
     date: str
     rating: int
+
+
+class ReviewStatus(BaseModel):
+    """艾宾浩斯复习状态概览。"""
+
+    due_count: int = Field(0, description="到期待复习的知识点数")
+    total_records: int = Field(0, description="总复习记录数")
+    completed: int = Field(0, description="已完成复习数")
 
 
 class TargetProgress(BaseModel):
@@ -69,6 +79,10 @@ class ProgressOverviewResponse(BaseSchema):
         default_factory=list,
         description="薄弱知识点 ID（0 < mastery < 0.5；mastery=0 未学不算薄弱）",
     )
+    review_status: ReviewStatus | None = Field(
+        default=None,
+        description="艾宾浩斯复习状态概览（无复习记录时为 None）",
+    )
 
 
 class RecomputeMasteryRequest(BaseSchema):
@@ -90,3 +104,28 @@ class RecomputeMasteryResponse(BaseSchema):
     user_id: UUID
     recomputed: int = Field(..., description="本次重算的知识点数量")
     updated: int = Field(..., description="mastery 实际发生变化的知识点数量")
+
+
+class CheckInResponse(BaseSchema):
+    """打卡响应。"""
+
+    user_id: UUID
+    check_date: str
+    streak_days: int
+    is_today_checked: bool
+
+
+class ActivityDay(BaseModel):
+    """单日活动数据。"""
+
+    date: str
+    count: int = Field(0, description="当日提交数")
+
+
+class ActivityResponse(BaseSchema):
+    """GET /api/v1/progress/activity 响应。"""
+
+    user_id: UUID
+    days: list[ActivityDay]
+    total_week: int = Field(0, description="本周总提交数")
+    total_last_week: int = Field(0, description="上周总提交数")

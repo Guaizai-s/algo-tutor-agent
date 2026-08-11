@@ -21,15 +21,22 @@ from app.core.database import get_db
 from app.schemas.learning import (
     AttemptRequest,
     AttemptResponse,
+    DailyTaskItemUpdateRequest,
+    DailyTaskItemUpdateResponse,
     DailyTaskTodayResponse,
     LearningPathGenerateRequest,
     LearningPathRead,
+    MarkMasteredRequest,
+    MarkMasteredResponse,
+    RoadmapResponse,
 )
-from app.services.daily_tasks import get_or_create_today_task
+from app.services.daily_tasks import get_or_create_today_task, update_daily_task_item
 from app.services.learning_path import (
     CycleDetectedError,
     generate_learning_path,
     get_current_learning_path,
+    get_roadmap_data,
+    mark_knowledge_mastered,
     record_attempt,
 )
 
@@ -61,6 +68,20 @@ async def api_generate_learning_path(
     return result
 
 
+@path_router.post("/mark-mastered", response_model=MarkMasteredResponse)
+async def api_mark_mastered(
+    req: MarkMasteredRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MarkMasteredResponse:
+    """标记知识点为已掌握（自评），跳过路径中对应项。"""
+    mastery, skipped = await mark_knowledge_mastered(db, req.user_id, req.knowledge_id)
+    return MarkMasteredResponse(
+        knowledge_id=req.knowledge_id,
+        mastery=mastery,
+        items_skipped=skipped,
+    )
+
+
 @path_router.get("/current", response_model=LearningPathRead)
 async def api_get_current_learning_path(
     user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
@@ -74,6 +95,15 @@ async def api_get_current_learning_path(
             detail="用户尚未生成学习路径，请先调用 POST /api/v1/learning-paths/generate",
         )
     return result
+
+
+@path_router.get("/roadmap", response_model=RoadmapResponse)
+async def api_get_roadmap(
+    user_id: UUID = Query(..., description="用户 ID（COMPAT: 认证落地后从 token 解析）"),
+    db: AsyncSession = Depends(get_db),
+) -> RoadmapResponse:
+    """获取路线图聚合数据：知识树 + 用户学习状态。"""
+    return await get_roadmap_data(db, user_id)
 
 
 @path_router.post("/attempts", response_model=AttemptResponse)
@@ -100,5 +130,19 @@ async def api_get_today_task(
     """获取今日任务（幂等：同日重复请求返回同一份计划）。"""
     try:
         return await get_or_create_today_task(db, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@daily_router.patch("/{task_id}/items/{item_id}", response_model=DailyTaskItemUpdateResponse)
+async def api_update_daily_task_item(
+    task_id: UUID,
+    item_id: UUID,
+    req: DailyTaskItemUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> DailyTaskItemUpdateResponse:
+    """更新任务项状态（标记完成/跳过），全部完成时自动打卡。"""
+    try:
+        return await update_daily_task_item(db, task_id, item_id, req.status)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

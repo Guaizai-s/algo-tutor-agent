@@ -40,7 +40,7 @@ const WrongAnswers: React.FC = () => {
     progressApi
       .getWrongAnswers()
       .then((resp) => {
-        if (!cancelled) setItems(resp.data as WrongAnswer[])
+        if (!cancelled) setItems((resp.data as { items: WrongAnswer[] }).items || [])
       })
       .catch((err: unknown) => {
         if (cancelled) return

@@ -78,3 +78,28 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserRead
+
+
+class ProfileUpdateRequest(BaseModel):
+    """更新 ACM 档案字段（全部可选）。"""
+
+    school: str | None = Field(default=None, max_length=255)
+    cf_handle: str | None = Field(default=None, max_length=64)
+    atcoder_handle: str | None = Field(default=None, max_length=64)
+    target_medal: TargetMedal | None = None
+
+
+class BindCFRequest(BaseModel):
+    """绑定 Codeforces handle 请求。"""
+
+    handle: str = Field(min_length=1, max_length=64)
+
+
+class BindCFResponse(BaseModel):
+    """CF 绑定结果。"""
+
+    handle: str
+    current_rating: int | None
+    max_rating: int | None
+    rank: str | None
+    message: str

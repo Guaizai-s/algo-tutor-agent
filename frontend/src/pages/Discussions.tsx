@@ -14,13 +14,10 @@ const Discussions: React.FC = () => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    // 讨论区按全局列表展示；后端尚未提供「全局题解列表」API（只有按题目查询），
-    // 这里使用 discussionApi.getSolutions 暂时打到一个空 problemId 占位上，捕获 404。
-    // 等 Role B 实现 Task 15 后端 GET /solutions 后改为独立接口。
     discussionApi
-      .getSolutions('list')
+      .getGlobalSolutions()
       .then((resp) => {
-        if (!cancelled) setSolutions(resp.data as Solution[])
+        if (!cancelled) setSolutions(resp.data.items as Solution[])
       })
       .catch((err: unknown) => {
         if (cancelled) return

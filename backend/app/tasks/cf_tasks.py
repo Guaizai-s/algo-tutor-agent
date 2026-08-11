@@ -69,6 +69,24 @@ async def _run_with_session(
         await engine.dispose()
 
 
+async def _run_with_session_only(
+    coro_factory: Callable[[AsyncSession], Awaitable[object]],
+) -> object:
+    """在独立事件循环中执行 async 函数，只创建 engine + session（不需要 CF client）。
+
+    用于不需要 CF API 调用的任务（如复习提醒）。
+    """
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with factory() as session:
+            async with session.begin():
+                result = await coro_factory(session)
+            return result
+    finally:
+        await engine.dispose()
+
+
 @celery_app.task(bind=True, name="app.tasks.cf_tasks.sync_problemset_task")
 def sync_problemset_task(self) -> dict:  # type: ignore[no-untyped-def]
     """Celery 任务：全量同步 CF problemset.problems（每日）。
@@ -171,4 +189,65 @@ def sync_single_user_status_task(self, account_id: str) -> dict:  # type: ignore
 
     result = asyncio.run(_run_with_session(_run))
     logger.info("Celery task: sync_single_user_status_task done: %s", result)
+    return result  # type: ignore[return-value]
+
+
+@celery_app.task(bind=True, name="app.tasks.cf_tasks.send_review_reminders_task")
+def send_review_reminders_task(self) -> dict:  # type: ignore[no-untyped-def]
+    """Celery 定时任务：检查到期待复习项并发送提醒（Task 13.3）。
+
+    每天 UTC 08:00 执行一次，检查所有用户到期的复习记录，
+    为每个到期记录创建一条 review_reminder 通知。
+    """
+    logger.info("Celery task: send_review_reminders_task started")
+
+    async def _run(db: AsyncSession) -> dict:
+        from sqlalchemy import select
+
+        from app.models.knowledge import KnowledgePoint
+        from app.services.push import send_review_reminder
+        from app.services.review import get_all_due_reviews
+
+        due = await get_all_due_reviews(db, limit=100)
+        logger.info("send_review_reminders_task: found %d due reviews", len(due))
+
+        sent = 0
+        for record in due:
+            kp = (
+                await db.execute(select(KnowledgePoint.name).where(KnowledgePoint.id == record.knowledge_id))
+            ).scalar_one_or_none()
+            if kp is None:
+                continue
+            await send_review_reminder(
+                db,
+                user_id=record.user_id,
+                knowledge_id=record.knowledge_id,
+                knowledge_name=kp,
+                stage=record.stage.value,
+            )
+            sent += 1
+
+        return {"due_count": len(due), "sent": sent, "status": "ok"}
+
+    result = asyncio.run(_run_with_session_only(_run))
+    logger.info("Celery task: send_review_reminders_task done: %s", result)
+    return result  # type: ignore[return-value]
+
+
+@celery_app.task(bind=True, name="app.tasks.cf_tasks.send_recommendation_push_task")
+def send_recommendation_push_task(self) -> dict:  # type: ignore[no-untyped-def]
+    """Celery 定时任务：为有薄弱知识点的用户推送推荐通知（Task 12.5）。
+
+    每天 UTC 06:00 执行一次，检查所有有薄弱知识点的用户，
+    为每个用户生成推荐题目并推送 remediation 通知。
+    """
+    logger.info("Celery task: send_recommendation_push_task started")
+
+    async def _run(db: AsyncSession) -> dict:
+        from app.services.push import send_batch_recommendation_push
+
+        return await send_batch_recommendation_push(db, limit=100)
+
+    result = asyncio.run(_run_with_session_only(_run))
+    logger.info("Celery task: send_recommendation_push_task done: %s", result)
     return result  # type: ignore[return-value]

@@ -10,9 +10,12 @@ import {
   Clock,
   Cpu,
   AlertCircle,
+  ExternalLink,
+  Link2,
 } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { problemsApi } from '../utils/api'
+import { useAuthStore } from '../stores/authStore'
 import type { CodeExecutionResult, Problem } from '../types'
 
 type Lang = 'python' | 'cpp' | 'java'
@@ -39,6 +42,8 @@ const ProblemDetail: React.FC = () => {
   const [result, setResult] = useState<CodeExecutionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hintLevel, setHintLevel] = useState(0)
+  const { user } = useAuthStore()
+  const cfBound = !!user?.cf_handle
 
   // Load real problem by UUID.
   useEffect(() => {
@@ -83,6 +88,10 @@ const ProblemDetail: React.FC = () => {
   }
 
   const hints = problem.hints || []
+  // CF 外链题：来源是 codeforces，或无样例且有外链 URL
+  const isCFProblem =
+    problem.source === 'codeforces' ||
+    (!!problem.external_url && !problem.sample_input)
 
   const handleSubmit = async () => {
     if (!id) {
@@ -162,6 +171,44 @@ const ProblemDetail: React.FC = () => {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-1/2 border-r border-gray-200 overflow-y-auto p-6 bg-white">
+          {isCFProblem && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <ExternalLink size={18} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-medium text-blue-900">Codeforces 外链题</p>
+                  <p className="text-blue-700 mt-1">
+                    完整题面和测试数据在 Codeforces，本地只能用空输入运行代码做草稿调试。
+                    {cfBound
+                      ? '你在 CF 的提交会每 5 分钟自动同步，AC 后自动计入掌握度。'
+                      : '绑定 CF 账号后，你在 CF 的提交会自动同步进来。'}
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    {problem.external_url && (
+                      <a
+                        href={problem.external_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
+                      >
+                        <ExternalLink size={12} />
+                        去 Codeforces 读题 / 提交
+                      </a>
+                    )}
+                    {!cfBound && (
+                      <Link
+                        to="/profile"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 text-xs font-medium rounded transition-colors"
+                      >
+                        <Link2 size={12} />
+                        绑定 CF 账号
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="prose max-w-none">
             <h2 className="text-lg font-semibold">题目描述</h2>
             <p className="text-gray-700 mt-2 whitespace-pre-wrap">{problem.description}</p>

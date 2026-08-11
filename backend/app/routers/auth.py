@@ -9,8 +9,22 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser
 from app.core.security import create_access_token
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserRead
-from app.services.auth import UserAlreadyExistsError, authenticate_user, create_user
+from app.schemas.auth import (
+    BindCFRequest,
+    BindCFResponse,
+    LoginRequest,
+    ProfileUpdateRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserRead,
+)
+from app.services.auth import (
+    UserAlreadyExistsError,
+    authenticate_user,
+    bind_cf_handle,
+    create_user,
+    update_profile,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,3 +59,25 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
 @router.get("/me", response_model=UserRead)
 async def get_me(current_user: CurrentUser) -> UserRead:
     return UserRead.model_validate(current_user)
+
+
+@router.patch("/profile", response_model=UserRead)
+async def update_my_profile(
+    payload: ProfileUpdateRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserRead:
+    updated = await update_profile(db, current_user, payload)
+    return UserRead.model_validate(updated)
+
+
+@router.post("/bind-cf", response_model=BindCFResponse)
+async def bind_codeforces(
+    payload: BindCFRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> BindCFResponse:
+    try:
+        return await bind_cf_handle(db, current_user, payload.handle)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

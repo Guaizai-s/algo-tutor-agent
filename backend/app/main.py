@@ -11,11 +11,15 @@ from app.core.database import async_session_maker, engine
 from app.routers import (
     agent,
     auth,
+    coldstart,
     discussions,
+    judge,
     knowledge,
     learning,
+    notifications,
     problems,
     progress,
+    review,
     solutions,
     submissions,
     wrongbook,
@@ -65,6 +69,10 @@ app.include_router(discussions.router, prefix=settings.API_V1_STR)
 app.include_router(solutions.router, prefix=settings.API_V1_STR)
 app.include_router(wrongbook.router, prefix=settings.API_V1_STR)
 app.include_router(submissions.router, prefix=settings.API_V1_STR)
+app.include_router(coldstart.router, prefix=settings.API_V1_STR)
+app.include_router(review.router, prefix=settings.API_V1_STR)
+app.include_router(judge.router, prefix=settings.API_V1_STR)
+app.include_router(notifications.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

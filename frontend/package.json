@@ -28,8 +28,11 @@
     "recharts": "^3.9.1",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
+    "rehype-pretty-code": "^0.14.5",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "shiki": "^4.4.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

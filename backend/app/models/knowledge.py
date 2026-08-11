@@ -86,6 +86,13 @@ class LectureLevel(StrEnum):
     DEEP = "deep"
 
 
+class LectureSource(StrEnum):
+    OI_WIKI = "oi_wiki"
+    ZUO_LECTURE = "zuo_lecture"
+    AI_GENERATED = "ai_generated"  # Phase 2: user-specific dynamic generation
+    AI_REWRITTEN = "ai_rewritten"  # Phase 1: batch rewrite from OI-Wiki + zuo
+
+
 class Lecture(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "lectures"
 
@@ -105,6 +112,22 @@ class Lecture(UUIDMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[LectureSource] = mapped_column(
+        SAEnum(
+            LectureSource,
+            name="lecture_source",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=LectureSource.OI_WIKI,
+    )
+    source_lecture_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("lectures.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    rewrite_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    generation_prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     knowledge: Mapped[KnowledgePoint] = relationship(KnowledgePoint, backref="lectures")
 

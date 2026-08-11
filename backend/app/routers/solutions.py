@@ -139,26 +139,38 @@ def _comment_to_tree(comments: list[SolutionComment]) -> list[SolutionCommentRea
 
 @router.get("", response_model=SolutionListResponse)
 async def api_list_solutions(
-    problem_id: UUID = Query(..., description="题目 ID"),
+    problem_id: UUID | None = Query(None, description="题目 ID（可选，不传则全局列表）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> SolutionListResponse:
-    # 验证题目存在
-    p_exists = (await db.execute(select(Problem.id).where(Problem.id == problem_id))).scalar_one_or_none()
-    if p_exists is None:
-        raise HTTPException(status_code=404, detail="problem not found")
+    if problem_id is not None:
+        # 验证题目存在
+        p_exists = (await db.execute(select(Problem.id).where(Problem.id == problem_id))).scalar_one_or_none()
+        if p_exists is None:
+            raise HTTPException(status_code=404, detail="problem not found")
 
-    count_stmt = select(func.count(Solution.id)).where(Solution.problem_id == problem_id)
-    total = (await db.execute(count_stmt)).scalar_one()
+        count_stmt = select(func.count(Solution.id)).where(Solution.problem_id == problem_id)
+        total = (await db.execute(count_stmt)).scalar_one()
 
-    stmt = (
-        select(Solution)
-        .where(Solution.problem_id == problem_id)
-        .order_by(Solution.is_featured.desc(), Solution.like_count.desc(), Solution.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+        stmt = (
+            select(Solution)
+            .where(Solution.problem_id == problem_id)
+            .order_by(Solution.is_featured.desc(), Solution.like_count.desc(), Solution.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    else:
+        # 全局列表
+        count_stmt = select(func.count(Solution.id))
+        total = (await db.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(Solution)
+            .order_by(Solution.is_featured.desc(), Solution.like_count.desc(), Solution.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
     rows = (await db.execute(stmt)).scalars().all()
 
     return SolutionListResponse(
@@ -263,6 +275,21 @@ async def api_like_solution(
     await db.flush()
     await db.refresh(solution)
     return _solution_to_read(solution)
+
+
+@router.get("/{solution_id}/comments", response_model=list[SolutionCommentRead])
+async def api_get_solution_comments(
+    solution_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[SolutionCommentRead]:
+    """获取题解评论列表。"""
+    stmt = (
+        select(SolutionComment)
+        .where(SolutionComment.solution_id == solution_id)
+        .order_by(SolutionComment.created_at.asc())
+    )
+    comments = (await db.execute(stmt)).scalars().all()
+    return _comment_to_tree(list(comments))
 
 
 @router.post("/{solution_id}/comments", response_model=SolutionCommentRead, status_code=201)

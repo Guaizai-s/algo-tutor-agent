@@ -10,3 +10,31 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Shiki 代码块行号样式 */
+.shiki {
+  margin: 1rem 0;
+  padding: 1rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+}
+
+.shiki code {
+  counter-reset: line;
+  display: grid;
+}
+
+.shiki .line {
+  padding: 0 1rem;
+}
+
+.shiki .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2.5rem;
+  margin-right: 1.5rem;
+  text-align: right;
+  color: #6b7280;
+  user-select: none;
+}

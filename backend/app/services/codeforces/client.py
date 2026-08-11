@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from typing import Any
 
 import httpx
@@ -101,8 +102,11 @@ class CodeforcesClient:
 
         try:
             # 读取上次调用时间戳
+            # 注意：必须使用 wall clock (time.time())，不能用 asyncio loop time。
+            # asyncio loop time 每个进程独立从 0 开始，跨进程共享会算出错误 elapsed，
+            # 导致 sleep 几小时卡死 CF 同步任务。
             last_ts = await self._redis.get(CF_RATE_LIMIT_KEY)
-            now = asyncio.get_event_loop().time()
+            now = time.time()
             if last_ts is not None:
                 elapsed = now - float(last_ts)
                 wait = self._min_interval - elapsed
@@ -110,7 +114,7 @@ class CodeforcesClient:
                     logger.debug("CF API rate limit: waiting %.2fs", wait)
                     await asyncio.sleep(wait)
             # 更新最后调用时间戳
-            await self._redis.set(CF_RATE_LIMIT_KEY, str(asyncio.get_event_loop().time()))
+            await self._redis.set(CF_RATE_LIMIT_KEY, str(time.time()))
         finally:
             await self._redis.delete(CF_RATE_LIMIT_LOCK_KEY)
 

@@ -19,7 +19,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -38,6 +38,7 @@ from app.models.learning import (
 from app.models.problem import Problem
 from app.schemas.learning import (
     DailyTaskItemRead,
+    DailyTaskItemUpdateResponse,
     DailyTaskPathPreviewItem,
     DailyTaskRead,
     DailyTaskTodayResponse,
@@ -84,8 +85,8 @@ async def get_or_create_today_task(
         # 但仍需要一个 knowledge_id（NOT NULL），这里抛 404 由 router 处理
         raise ValueError("用户尚未生成学习路径，无法生成当日任务")
 
-    # 推荐候选
-    template, application, challenge, _no_rating, _profile = await recommend_for_slots(db, user_id, target_kp.id)
+    # 推荐候选（含 no_rating fallback）
+    template, application, challenge, no_rating, _profile = await recommend_for_slots(db, user_id, target_kp.id)
 
     # CARD 讲义
     lecture_card = await _pick_card_lecture(db, target_kp.id)
@@ -138,7 +139,7 @@ async def get_or_create_today_task(
                 position=position,
                 lecture_id=None,
                 status=DailyTaskItemStatus.PENDING,
-                missing_reason="no CARD lecture for this knowledge point",
+                missing_reason="no lecture for this knowledge point",
             )
         )
         position += 1
@@ -152,6 +153,7 @@ async def get_or_create_today_task(
         template,
         used_problem_ids,
         missing_slots,
+        fallback=no_rating,
     )
 
     # 3. 应用题（2 道）
@@ -164,6 +166,7 @@ async def get_or_create_today_task(
             application,
             used_problem_ids,
             missing_slots,
+            fallback=no_rating,
         )
 
     # 4. 挑战题（1 道，允许缺省）
@@ -176,6 +179,7 @@ async def get_or_create_today_task(
         used_problem_ids,
         missing_slots,
         allow_missing=True,
+        fallback=no_rating,
     )
 
     task.missing_slots = ",".join(missing_slots)
@@ -195,13 +199,25 @@ async def _add_problem_slot(
     used_problem_ids: set[UUID],
     missing_slots: list[str],
     allow_missing: bool = False,
+    fallback: list | None = None,
 ) -> int:
-    """从候选中取一道未用过的题写入任务项。返回下一个 position。"""
+    """从候选中取一道未用过的题写入任务项。返回下一个 position。
+
+    候选不足时尝试 fallback（无 rating 限制），仍不足则标记 missing_slot。
+    """
     chosen = None
     for p in candidates:
         if p.id not in used_problem_ids:
             chosen = p
             break
+
+    # 主候选不足时尝试 fallback
+    if chosen is None and fallback:
+        for p in fallback:
+            if p.id not in used_problem_ids:
+                chosen = p
+                break
+
     if chosen is not None:
         used_problem_ids.add(chosen.id)
         db.add(
@@ -231,16 +247,20 @@ async def _add_problem_slot(
 
 
 async def _pick_card_lecture(db: AsyncSession, knowledge_id: UUID) -> Lecture | None:
-    """选择某知识点的 CARD 讲义。"""
-    stmt = select(Lecture).where(
-        Lecture.knowledge_id == knowledge_id,
-        Lecture.level == LectureLevel.CARD,
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    if not rows:
-        return None
-    # 若有多张 CARD，取 created_at 最旧的（稳定）
-    return min(rows, key=lambda lec: (lec.created_at, lec.title))
+    """选择某知识点的讲义，按优先级降级：CARD → STANDARD → DEEP → None。
+
+    优先取 CARD（知识卡片），若无则降级到 STANDARD，再降级到 DEEP。
+    同级别有多张时取 created_at 最旧的（稳定选择）。
+    """
+    for level in (LectureLevel.CARD, LectureLevel.STANDARD, LectureLevel.DEEP):
+        stmt = select(Lecture).where(
+            Lecture.knowledge_id == knowledge_id,
+            Lecture.level == level,
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        if rows:
+            return min(rows, key=lambda lec: (lec.created_at, lec.title))
+    return None
 
 
 async def _select_target_knowledge(db: AsyncSession, user_id: UUID) -> tuple[KnowledgePoint | None, bool]:
@@ -371,3 +391,89 @@ async def _build_path_preview(db: AsyncSession, user_id: UUID) -> list[DailyTask
         )
         for it in items
     ]
+
+
+async def update_daily_task_item(
+    db: AsyncSession,
+    task_id: UUID,
+    item_id: UUID,
+    status: DailyTaskItemStatus,
+) -> DailyTaskItemUpdateResponse:
+    """更新任务项状态（标记完成/跳过），并检查是否触发打卡。
+
+    - 状态改为 DONE 时，若全部任务项完成，自动触发打卡
+    - 返回当前进度（done/total）和是否触发打卡
+    """
+    # 查找任务项
+    item = (await db.execute(select(DailyTaskItem).where(DailyTaskItem.id == item_id))).scalar_one_or_none()
+    if item is None:
+        raise ValueError(f"DailyTaskItem {item_id} not found")
+    if item.task_id != task_id:
+        raise ValueError(f"DailyTaskItem {item_id} does not belong to task {task_id}")
+
+    item.status = status
+    await db.flush()
+
+    # 统计当前任务进度
+    task = (await db.execute(select(DailyTask).where(DailyTask.id == task_id))).scalar_one()
+    done_count = (
+        await db.execute(
+            select(func.count(DailyTaskItem.id)).where(
+                DailyTaskItem.task_id == task_id,
+                DailyTaskItem.status == DailyTaskItemStatus.DONE,
+            )
+        )
+    ).scalar_one()
+    total_items = (
+        await db.execute(select(func.count(DailyTaskItem.id)).where(DailyTaskItem.task_id == task_id))
+    ).scalar_one()
+
+    # 全部完成时触发打卡
+    check_in = False
+    if done_count >= total_items and total_items > 0:
+        from app.services.progress import do_check_in
+
+        check_in_result = await do_check_in(db, task.user_id)
+        check_in = check_in_result.is_today_checked
+
+    # 构建 item read
+    item_read = await _build_item_read(db, item)
+
+    return DailyTaskItemUpdateResponse(
+        item=item_read,
+        task_done=done_count,
+        task_total=total_items,
+        all_done=done_count >= total_items,
+        check_in=check_in,
+    )
+
+
+async def _build_item_read(db: AsyncSession, item: DailyTaskItem) -> DailyTaskItemRead:
+    """构建单个 DailyTaskItemRead。"""
+    lecture = None
+    if item.lecture_id:
+        lec = (await db.execute(select(Lecture).where(Lecture.id == item.lecture_id))).scalar_one_or_none()
+        if lec:
+            lecture = LectureRef(id=lec.id, knowledge_id=lec.knowledge_id, level=lec.level.value, title=lec.title)
+
+    problem = None
+    if item.problem_id:
+        prob = (await db.execute(select(Problem).where(Problem.id == item.problem_id))).scalar_one_or_none()
+        if prob:
+            problem = ProblemRef(
+                id=prob.id,
+                title=prob.title,
+                slug=prob.slug,
+                difficulty=prob.difficulty.value,
+                cf_rating=prob.cf_rating,
+            )
+
+    return DailyTaskItemRead(
+        id=item.id,
+        item_type=item.item_type,
+        position=item.position,
+        lecture=lecture,
+        problem=problem,
+        status=item.status,
+        missing_reason=item.missing_reason,
+    )

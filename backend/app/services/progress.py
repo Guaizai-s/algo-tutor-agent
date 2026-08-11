@@ -38,16 +38,21 @@ from app.models.knowledge import KnowledgePoint
 from app.models.learning import (
     MASTERY_THRESHOLD,
     WEAK_MASTERY_THRESHOLD,
+    CheckIn,
     LearningProfile,
     UserKnowledgeState,
     UserProblemAC,
 )
 from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
 from app.schemas.progress import (
+    ActivityDay,
+    ActivityResponse,
+    CheckInResponse,
     MasteryByCategory,
     ProgressOverviewResponse,
     RatingHistoryPoint,
     RecomputeMasteryResponse,
+    ReviewStatus,
     TargetProgress,
 )
 
@@ -98,6 +103,9 @@ async def get_progress_overview(db: AsyncSession, user_id: UUID) -> ProgressOver
     # 10. CF Rating 曲线（基于 RatingHistory）
     rating_history = await _build_rating_history(db, user_id)
 
+    # 11. 艾宾浩斯复习状态（只读调用 Role B 的 review service）
+    review_status = await _build_review_status(db, user_id)
+
     return ProgressOverviewResponse(
         user_id=user_id,
         total_knowledge_points=total_kp,
@@ -110,23 +118,33 @@ async def get_progress_overview(db: AsyncSession, user_id: UUID) -> ProgressOver
         rating_history=rating_history,
         target_progress=target_progress,
         weak_knowledge_ids=weak_ids,
+        review_status=review_status,
     )
 
 
 async def _compute_streak_days(db: AsyncSession, user_id: UUID) -> int:
-    """计算连续打卡天数（按用户时区 Asia/Shanghai 的自然日）。
+    """计算连续打卡天数（基于 CheckIn 表）。
 
-    定义：用户最近一次提交的日期到今天，连续每天都有提交的天数。
-    如果今天有提交且昨天也有，则 streak 至少为 2。
-    如果最近一次提交是今天，streak = 1 + 连续昨天/前天...
-    如果最近一次提交不是今天，streak = 0（断签）。
-    无任何提交时返回 0。
-
-    时区处理：
-    - 数据库存储 UTC 时间，但用户时区是 Asia/Shanghai
-    - 必须按用户时区转换后再计算自然日，否则北京时间 00:00-08:00 的提交
-      会因为 UTC 仍是前一天而错误地断签
+    优先使用 CheckIn 表；若为空则回退到 Submission 表计算。
     """
+    # 优先使用 CheckIn 表
+    rows = (
+        await db.execute(
+            select(CheckIn.check_date, CheckIn.streak_days)
+            .where(CheckIn.user_id == user_id)
+            .order_by(CheckIn.check_date.desc())
+            .limit(1)
+        )
+    ).first()
+    if rows is not None:
+        return rows.streak_days
+
+    # 回退到 Submission 表计算
+    return await _compute_streak_from_submissions(db, user_id)
+
+
+async def _compute_streak_from_submissions(db: AsyncSession, user_id: UUID) -> int:
+    """从 Submission 表计算连续打卡天数（回退方案）。"""
     # 查询用户所有提交时间戳（UTC）
     rows = (
         await db.execute(
@@ -192,6 +210,23 @@ async def _build_rating_history(db: AsyncSession, user_id: UUID) -> list[RatingH
     ]
 
 
+async def _build_review_status(db: AsyncSession, user_id: UUID) -> ReviewStatus | None:
+    """获取艾宾浩斯复习状态（只读调用 Role B 的 review service）。
+
+    无复习记录时返回 None，前端据此判断是否显示复习卡片。
+    """
+    from app.services.review import get_review_status
+
+    status = await get_review_status(db, user_id)
+    if status["total_records"] == 0:
+        return None
+    return ReviewStatus(
+        due_count=status["due_count"],
+        total_records=status["total_records"],
+        completed=status["completed"],
+    )
+
+
 async def _count_mastered_knowledge(db: AsyncSession, user_id: UUID) -> int:
     """统计已掌握知识点数。
 
@@ -213,6 +248,58 @@ async def _count_mastered_knowledge(db: AsyncSession, user_id: UUID) -> int:
         .all()
     )
 
+    if not states:
+        return 0
+
+    mastered = 0
+    for kid in states:
+        ac_count = await _count_distinct_ac_in_knowledge(db, user_id, kid)
+        if ac_count >= MASTERED_MIN_AC_COUNT:
+            mastered += 1
+    return mastered
+
+
+async def _count_mastered_in_range(db: AsyncSession, user_id: UUID, rating_min: int, rating_max: int) -> int:
+    """统计目标 rating 区间内用户已掌握的知识点数。
+
+    只统计同时满足以下条件的知识点：
+    1. 关联了 rating 在 [rating_min, rating_max] 区间内的已发布题目
+    2. 用户 mastery >= 0.8 且 AC >= 3 且非 weak
+    """
+    # 目标区间内的知识点 ID
+    range_kp_ids = (
+        (
+            await db.execute(
+                select(func.distinct(ProblemKnowledgePoint.knowledge_id))
+                .join(Problem, Problem.id == ProblemKnowledgePoint.problem_id)
+                .where(
+                    Problem.status == ProblemStatus.PUBLISHED,
+                    Problem.cf_rating >= rating_min,
+                    Problem.cf_rating <= rating_max,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not range_kp_ids:
+        return 0
+
+    # 区间内用户已掌握的知识点
+    states = (
+        (
+            await db.execute(
+                select(UserKnowledgeState.knowledge_id).where(
+                    UserKnowledgeState.user_id == user_id,
+                    UserKnowledgeState.knowledge_id.in_(range_kp_ids),
+                    UserKnowledgeState.mastery >= MASTERY_THRESHOLD,
+                    UserKnowledgeState.is_weak.is_(False),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     if not states:
         return 0
 
@@ -247,14 +334,24 @@ async def _collect_weak_knowledge_ids(db: AsyncSession, user_id: UUID) -> list[U
 
 
 async def _build_mastery_by_category(db: AsyncSession, user_id: UUID) -> list[MasteryByCategory]:
-    """构造雷达图数据：每个知识点的 mastery 百分比 + knowledge_id。
+    """构造知识点掌握度列表：每个知识点的 mastery 百分比 + knowledge_id + 父分类名。
 
     对于用户尚未有 UserKnowledgeState 记录的知识点，mastery 视为 0。
-    返回 knowledge_id 用于前端映射 weak_knowledge_ids。
+    返回 knowledge_id 用于前端映射 weak_knowledge_ids，
+    parent_name 用于前端按一级分类分组展示（替代雷达图）。
     """
+    from sqlalchemy.orm import aliased
+
+    parent_kp = aliased(KnowledgePoint)
     kps = (
         await db.execute(
-            select(KnowledgePoint.id, KnowledgePoint.name).order_by(KnowledgePoint.order, KnowledgePoint.name)
+            select(
+                KnowledgePoint.id,
+                KnowledgePoint.name,
+                parent_kp.name.label("parent_name"),
+            )
+            .outerjoin(parent_kp, KnowledgePoint.parent_id == parent_kp.id)
+            .order_by(KnowledgePoint.order, KnowledgePoint.name)
         )
     ).all()
 
@@ -268,12 +365,13 @@ async def _build_mastery_by_category(db: AsyncSession, user_id: UUID) -> list[Ma
     mastery_map = {s.knowledge_id: s.mastery for s in states}
 
     result: list[MasteryByCategory] = []
-    for kp_id, kp_name in kps:
+    for kp_id, kp_name, parent_name in kps:
         m = mastery_map.get(kp_id, 0.0)
         result.append(
             MasteryByCategory(
                 knowledge_id=kp_id,
                 name=kp_name,
+                parent_name=parent_name,
                 value=int(m * 100),
             )
         )
@@ -281,22 +379,50 @@ async def _build_mastery_by_category(db: AsyncSession, user_id: UUID) -> list[Ma
 
 
 async def _build_target_progress(db: AsyncSession, user_id: UUID) -> TargetProgress | None:
-    """构造训练目标完成进度。"""
+    """构造训练目标完成进度。
+
+    按用户 LearningProfile 的目标 rating 区间筛选：
+    - total_in_range: 关联了 rating 在 [min, max] 区间已发布题目的知识点数
+    - mastered_in_range: 上述知识点中用户已掌握的数量
+    """
     profile = (await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))).scalar_one_or_none()
     if profile is None:
         return None
 
-    # COMPAT: KnowledgePoint 无 rating 字段，用全部知识点作为分母
-    total_kp = (await db.execute(select(func.count(KnowledgePoint.id)))).scalar_one()
-    mastered_in_range = await _count_mastered_knowledge(db, user_id)
+    # 统计目标 rating 区间内的知识点（通过 Problem.cf_rating 间接筛选）
+    total_in_range = (
+        await db.execute(
+            select(func.count(func.distinct(ProblemKnowledgePoint.knowledge_id)))
+            .join(Problem, Problem.id == ProblemKnowledgePoint.problem_id)
+            .where(
+                Problem.status == ProblemStatus.PUBLISHED,
+                Problem.cf_rating >= profile.target_rating_min,
+                Problem.cf_rating <= profile.target_rating_max,
+            )
+        )
+    ).scalar_one()
 
-    progress_percent = int(mastered_in_range / total_kp * 100) if total_kp > 0 else 0
+    if total_in_range == 0:
+        return TargetProgress(
+            target_rating_min=profile.target_rating_min,
+            target_rating_max=profile.target_rating_max,
+            mastered_in_range=0,
+            total_in_range=0,
+            progress_percent=0,
+        )
+
+    # 统计目标区间内用户已掌握的知识点数
+    mastered_in_range = await _count_mastered_in_range(
+        db, user_id, profile.target_rating_min, profile.target_rating_max
+    )
+
+    progress_percent = int(mastered_in_range / total_in_range * 100) if total_in_range > 0 else 0
 
     return TargetProgress(
         target_rating_min=profile.target_rating_min,
         target_rating_max=profile.target_rating_max,
         mastered_in_range=mastered_in_range,
-        total_in_range=total_kp,
+        total_in_range=total_in_range,
         progress_percent=progress_percent,
     )
 
@@ -515,3 +641,176 @@ async def _upsert_state(
     else:
         state.mastery = mastery
         state.is_weak = new_weak
+
+
+async def do_check_in(
+    db: AsyncSession,
+    user_id: UUID,
+) -> CheckInResponse:
+    """执行每日打卡，返回打卡状态。
+
+    幂等：同一用户同一天多次调用只记录一次。
+    自动计算连续打卡天数（streak）。
+
+    Raises:
+        ValueError: 打卡日期计算异常（极少发生）
+    """
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(settings.USER_TIMEZONE)
+    today = datetime.now(tz).date()
+
+    # 幂等：检查今天是否已打卡
+    existing = (
+        await db.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user_id,
+                CheckIn.check_date == today,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        return CheckInResponse(
+            user_id=user_id,
+            check_date=today.isoformat(),
+            streak_days=existing.streak_days,
+            is_today_checked=True,
+        )
+
+    # 计算连续打卡天数：查昨天是否有记录
+    yesterday = today - timedelta(days=1)
+    yesterday_record = (
+        await db.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user_id,
+                CheckIn.check_date == yesterday,
+            )
+        )
+    ).scalar_one_or_none()
+
+    streak = (yesterday_record.streak_days + 1) if yesterday_record is not None else 1
+
+    check_in = CheckIn(
+        user_id=user_id,
+        check_date=today,
+        streak_days=streak,
+    )
+    db.add(check_in)
+    await db.flush()
+
+    return CheckInResponse(
+        user_id=user_id,
+        check_date=today.isoformat(),
+        streak_days=streak,
+        is_today_checked=True,
+    )
+
+
+async def get_check_in_status(
+    db: AsyncSession,
+    user_id: UUID,
+) -> CheckInResponse:
+    """查询今日打卡状态。"""
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(settings.USER_TIMEZONE)
+    today = datetime.now(tz).date()
+
+    existing = (
+        await db.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user_id,
+                CheckIn.check_date == today,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        return CheckInResponse(
+            user_id=user_id,
+            check_date=today.isoformat(),
+            streak_days=existing.streak_days,
+            is_today_checked=True,
+        )
+
+    # 今天未打卡，返回最近一次 streak
+    last = (
+        await db.execute(
+            select(CheckIn.streak_days).where(CheckIn.user_id == user_id).order_by(CheckIn.check_date.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+
+    return CheckInResponse(
+        user_id=user_id,
+        check_date=today.isoformat(),
+        streak_days=last if last is not None else 0,
+        is_today_checked=False,
+    )
+
+
+async def get_activity(db: AsyncSession, user_id: UUID, days: int = 30) -> ActivityResponse:
+    """获取近 N 天每日提交活动数据（只读查询 Submission 表）。
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+        days: 查询天数，默认 30
+
+    Returns:
+        ActivityResponse: 包含每日提交数、本周/上周总数
+    """
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(settings.USER_TIMEZONE)
+    today = datetime.now(tz).date()
+    start_date = today - timedelta(days=days - 1)
+
+    # 查询近 N 天每日提交数
+    rows = (
+        await db.execute(
+            select(
+                func.date(Submission.submitted_at.op("AT TIME ZONE")(settings.USER_TIMEZONE)).label("day"),
+                func.count(Submission.id).label("cnt"),
+            )
+            .where(
+                Submission.user_id == user_id,
+                func.date(Submission.submitted_at.op("AT TIME ZONE")(settings.USER_TIMEZONE)) >= start_date,
+            )
+            .group_by("day")
+            .order_by("day")
+        )
+    ).all()
+
+    day_map: dict[str, int] = {
+        row.day.isoformat() if hasattr(row.day, "isoformat") else str(row.day): row.cnt for row in rows
+    }
+
+    # 构建完整日期序列
+    days_list: list[ActivityDay] = []
+    total_week = 0
+    total_last_week = 0
+    current = start_date
+    while current <= today:
+        date_str = current.isoformat()
+        count = day_map.get(date_str, 0)
+        days_list.append(ActivityDay(date=date_str, count=count))
+
+        # 本周（周一起始）
+        week_start = today - timedelta(days=today.weekday())
+        last_week_start = week_start - timedelta(days=7)
+        if current >= week_start:
+            total_week += count
+        elif current >= last_week_start:
+            total_last_week += count
+
+        current += timedelta(days=1)
+
+    return ActivityResponse(
+        user_id=user_id,
+        days=days_list,
+        total_week=total_week,
+        total_last_week=total_last_week,
+    )

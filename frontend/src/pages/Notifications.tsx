@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Bell, Check, CheckCheck, BookOpen, RefreshCw, AlertCircle, Loader2 } from 'lucide-react'
+import { Bell, Check, CheckCheck, BookOpen, RefreshCw, AlertCircle, Loader2, Target, Zap } from 'lucide-react'
 import { notificationApi } from '../utils/api'
 import type { Notification } from '../types'
 
@@ -14,7 +14,7 @@ const Notifications: React.FC = () => {
     notificationApi
       .list()
       .then((resp) => {
-        if (!cancelled) setNotifications(resp.data as Notification[])
+        if (!cancelled) setNotifications(resp.data.items as Notification[])
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -31,12 +31,10 @@ const Notifications: React.FC = () => {
   }, [])
 
   const handleMarkAsRead = async (id: string) => {
-    // 乐观更新
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
     try {
       await notificationApi.markAsRead(id)
     } catch {
-      // 失败回滚
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: false } : n)))
     }
   }
@@ -53,10 +51,14 @@ const Notifications: React.FC = () => {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'review':
+      case 'review_reminder':
         return <RefreshCw className="text-orange-600" size={20} />
-      case 'push':
+      case 'daily_task':
         return <BookOpen className="text-blue-600" size={20} />
+      case 'path_update':
+        return <Target className="text-green-600" size={20} />
+      case 'remediation':
+        return <Zap className="text-yellow-600" size={20} />
       default:
         return <AlertCircle className="text-gray-600" size={20} />
     }
@@ -64,10 +66,14 @@ const Notifications: React.FC = () => {
 
   const getIconBg = (type: string) => {
     switch (type) {
-      case 'review':
+      case 'review_reminder':
         return 'bg-orange-100'
-      case 'push':
+      case 'daily_task':
         return 'bg-blue-100'
+      case 'path_update':
+        return 'bg-green-100'
+      case 'remediation':
+        return 'bg-yellow-100'
       default:
         return 'bg-gray-100'
     }
@@ -91,14 +97,11 @@ const Notifications: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">消息中心</h1>
           <p className="text-gray-600 mt-2">查看系统通知和学习提醒</p>
         </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 flex items-start gap-3 text-yellow-800">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-start gap-3 text-red-800">
           <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium">消息中心暂不可用</p>
-            <p className="mt-1 text-yellow-700">
-              后端通知 API（Task 12）尚未实现。待 Role B 完成 <code>/api/v1/notifications</code>{' '}
-              后此页面将自动展示真实数据。
-            </p>
+            <p className="font-medium">加载失败</p>
+            <p className="mt-1 text-red-700">{error}</p>
           </div>
         </div>
       </div>
@@ -145,17 +148,17 @@ const Notifications: React.FC = () => {
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getIconBg(
-                    notification.type
+                    notification.notification_type
                   )}`}
                 >
-                  {getIcon(notification.type)}
+                  {getIcon(notification.notification_type)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-medium text-gray-900">{notification.title}</p>
                     {!notification.is_read && <span className="w-2 h-2 bg-blue-600 rounded-full" />}
                   </div>
-                  <p className="text-gray-600 text-sm">{notification.content}</p>
+                  <p className="text-gray-600 text-sm">{notification.body}</p>
                   <p className="text-gray-400 text-xs mt-1">
                     {new Date(notification.created_at).toLocaleString()}
                   </p>

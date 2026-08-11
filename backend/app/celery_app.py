@@ -52,6 +52,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.cf_tasks.sync_all_users_rating_task",
         "schedule": crontab(hour=4, minute=0),  # 每日 04:00 执行
     },
+    "review-reminders-daily": {
+        "task": "app.tasks.cf_tasks.send_review_reminders_task",
+        "schedule": crontab(hour=8, minute=0),  # 每日 08:00 UTC 执行
+    },
 }
 
 

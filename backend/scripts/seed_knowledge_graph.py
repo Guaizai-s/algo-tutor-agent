@@ -153,6 +153,28 @@ MERGE_KEYWORDS: dict[str, tuple[str, str, str]] = {
     "splay": ("splay-tree", "Splay 树", "自调整二叉搜索树"),
     "左偏树": ("leftist-tree", "左偏树", "可并堆的一种"),
     "红黑树": ("rbtree", "红黑树", "近似平衡的二叉搜索树"),
+    # v2 新增：修复跨源/跨分类重复知识点
+    "dfs": ("dfs", "DFS 深度优先搜索", "深度优先搜索算法，遍历/搜索树与图数据结构"),
+    "深度优先搜索": ("dfs", "DFS 深度优先搜索", "深度优先搜索算法，遍历/搜索树与图数据结构"),
+    "bfs": ("bfs", "BFS 广度优先搜索", "广度优先搜索算法，逐层遍历树与图数据结构"),
+    "宽度优先": ("bfs", "BFS 广度优先搜索", "广度优先搜索算法，逐层遍历树与图数据结构"),
+    "广度优先": ("bfs", "BFS 广度优先搜索", "广度优先搜索算法，逐层遍历树与图数据结构"),
+    "树的直径": ("tree-diameter", "树的直径", "树上最远两点距离及其求解方法"),
+    "树的重心": ("tree-centroid", "树的重心", "树上使最大子树最小的节点"),
+    "卡特兰数": ("catalan", "卡特兰数", "卡特兰数及其在组合计数中的应用"),
+    "圆方树": ("block-forest", "圆方树", "处理仙人掌图/点双连通分量的数据结构"),
+    "树上启发式合并": ("dsu-on-tree", "树上启发式合并", "DSU on Tree 树上离线统计的启发式合并技术"),
+    "分数规划": ("frac-programming", "分数规划/01分数规划", "01分数规划——二分答案+最值判定的优化技术"),
+    "博弈论": ("game-theory", "博弈论", "博弈论基础——Nim 游戏、SG 函数等"),
+    "替罪羊树": ("sgt", "替罪羊树", "基于部分重建的平衡二叉搜索树"),
+    "最近公共祖先": ("lca", "最近公共祖先 LCA", "倍增/Tarjan/欧拉序求树上最近公共祖先"),
+    "容斥原理": ("inclusion-exclusion", "容斥原理", "容斥原理在组合计数中的应用"),
+    "栈": ("stack", "栈", "后进先出（LIFO）的线性数据结构"),
+    "队列": ("queue", "队列", "先进先出（FIFO）的线性数据结构"),
+    "链表": ("linked-list", "链表", "链式存储的线性数据结构"),
+    "堆": ("heap", "堆", "支持快速获取最值的完全二叉树结构"),
+    "递归": ("recursion", "递归", "函数调用自身的编程技巧"),
+    "哈希表": ("hash-table", "哈希表", "基于哈希函数实现 O(1) 平均查找的数据结构"),
 }
 
 
@@ -278,6 +300,13 @@ PREREQUISITES: dict[str, list[str]] = {
 # 一个条目的标题若命中某子分类的关键词，则归到该子分类下；
 # 若都不命中则归到该一级分类下的 "其他" 子分类（运行时动态生成）
 SUBTAGS: dict[str, list[tuple[str, list[str]]]] = {
+    "基础": [
+        (
+            "基础算法",
+            ["排序", "二分", "双指针", "贪心", "前缀", "差分", "滑动", "枚举", "暴力", "构造", "递归", "分治", "模拟"],
+        ),
+        ("搜索", ["搜索", "bfs", "dfs", "astar", "ida", "回溯", "dancing", "启发", "双向", "迭代", "alpha", "meet"]),
+    ],
     "动态规划": [
         ("基础 DP", ["基础", "记忆化", "一维", "二维", "三维", "递归"]),
         ("背包 DP", ["背包"]),
@@ -289,7 +318,7 @@ SUBTAGS: dict[str, list[tuple[str, list[str]]]] = {
         ("其他 DP", ["计数", "dag", "套dp", "动态dp", "插头", "概率", "博弈", "专题", "决策", "数据量", "观察"]),
     ],
     "数据结构": [
-        ("基础数据结构", ["栈", "队列", "链表", "前缀和", "差分", "并查集", "堆"]),
+        ("基础数据结构", ["栈", "队列", "链表", "前缀和", "差分", "并查集", "堆", "哈希", "st表", "稀疏表"]),
         (
             "树结构",
             [
@@ -308,10 +337,21 @@ SUBTAGS: dict[str, list[tuple[str, list[str]]]] = {
                 "trie",
                 "前缀树",
                 "笛卡尔树",
+                "aa树",
+                "猫树",
+                "霍夫曼",
+                "huffman",
+                "wblt",
+                "手指",
+                "finger",
+                "左偏",
+                "leftist",
+                "替罪羊",
+                "sgt",
             ],
         ),
         ("可持久化", ["可持久化", "主席树", "持久化"]),
-        ("分块与离线", ["分块", "莫队", "离线", "根号"]),
+        ("分块与离线", ["分块", "莫队", "离线", "根号", "sqrt", "cdq", "区间最值", "segbeats"]),
         (
             "高级结构",
             [
@@ -327,34 +367,181 @@ SUBTAGS: dict[str, list[tuple[str, list[str]]]] = {
                 "舞蹈",
                 " dancing",
                 "linked-cut",
+                "top tree",
+                "euler tour",
+                "ett",
+                "析合",
+                "划分",
+                "pq",
+                "kinetic",
             ],
         ),
         ("字符串结构", ["后缀", "sam", "回文树", "序列自动机"]),
     ],
     "图论": [
-        ("图基础", ["图基础", "存图", "遍历", "dfs", "bfs", "拓扑", "欧拉", "哈密顿"]),
-        ("最短路", ["最短路", "dijkstra", "bellman", "floyd", "johnson", "差分约束"]),
+        (
+            "图基础",
+            ["图基础", "存图", "遍历", "dfs", "bfs", "拓扑", "欧拉", "哈密顿", "dag", "有向无环", "连通度", "概念"],
+        ),
+        ("最短路", ["最短路", "dijkstra", "bellman", "floyd", "johnson", "差分约束", "k短路", "最小环"]),
         ("生成树", ["最小生成树", "生成树", "kruskal", "prim", "次小", "瓶颈"]),
         ("连通性", ["强连通", "缩点", "割点", "割边", "桥", "双连通", "2-sat", "tarjan"]),
         ("网络流", ["网络流", "最大流", "最小割", "费用流", "二分图", "匹配", "匈牙", "dinic", "ek"]),
-        ("树论", ["lca", "树链", "倍增", "虚树", "点分治", "重心", "树分治"]),
+        (
+            "树论",
+            [
+                "lca",
+                "树链",
+                "倍增",
+                "虚树",
+                "点分治",
+                "重心",
+                "树分治",
+                "树基础",
+                "树中心",
+                "树的直径",
+                "树哈希",
+                "树上随机",
+                "prufer",
+                "ahu",
+                "树上启发",
+                "dsu on tree",
+            ],
+        ),
+        (
+            "特殊图论",
+            ["圆方", "弦图", "支配树", "斯坦纳", "steiner", "图着色", "最大团", "树形图", "stoer", "平面图", "拆点"],
+        ),
+        ("图论计数", ["矩阵树", "lgv", "环计数", "随机游走", "图计数"]),
     ],
     "字符串": [
-        ("字符串匹配", ["kmp", "ac自动机", "后缀自动机", "z", "exkmp", "bm"]),
+        ("字符串匹配", ["kmp", "ac自动机", "后缀自动机", "z", "exkmp", "bm", "boyer", "lyndon", "最小表示"]),
         ("字符串哈希", ["哈希", "hash"]),
-        ("回文与数组", ["manacher", "回文", "后缀数组", "后缀树"]),
-        ("字符串基础", ["trie", "前缀树", "序列自动机"]),
+        ("回文与数组", ["manacher", "回文", "后缀数组", "后缀树", "后缀平衡"]),
+        ("字符串基础", ["trie", "前缀树", "序列自动机", "标准库"]),
     ],
     "数学": [
         (
             "数论基础",
             ["质数", "素数", "gcd", "lcm", "欧几里得", "扩欧", "逆元", "费马", "欧拉", "中国剩余", "crt", "wilson"],
         ),
-        ("组合数学", ["组合", "卡特兰", "斯特林", "贝尔", "排列", "容斥", "莫比乌斯", "反演", "二项式", "抽屉"]),
-        ("线性代数", ["矩阵", "高斯", "线性基", "行列式"]),
+        (
+            "数论进阶",
+            [
+                "裴蜀",
+                "同余",
+                "连分数",
+                "离散对数",
+                "筛",
+                "杜教",
+                "类欧",
+                "阶乘",
+                "升幂",
+                "线性同余",
+                "卢卡斯",
+                "meissel",
+                "min25",
+                "min_25",
+                "模算术",
+                "pell",
+                "分解",
+                "原根",
+                "二次域",
+                "二次剩余",
+                "高次剩余",
+                "stern",
+                "洲阁",
+                "狄利克雷",
+                "pollard",
+                "powerful",
+            ],
+        ),
+        (
+            "组合数学",
+            [
+                "组合",
+                "卡特兰",
+                "斯特林",
+                "贝尔",
+                "排列",
+                "容斥",
+                "莫比乌斯",
+                "反演",
+                "二项式",
+                "抽屉",
+                "伯努利",
+                "entringer",
+                "eulerian",
+                "斐波那契",
+                "图论计数",
+                "分拆",
+                "polya",
+                "pólya",
+            ],
+        ),
+        (
+            "线性代数",
+            [
+                "矩阵",
+                "高斯",
+                "线性基",
+                "行列式",
+                "对角化",
+                "初等变换",
+                "jordan",
+                "线性映射",
+                "内积",
+                "外积",
+                "向量",
+                "线性空间",
+            ],
+        ),
         ("博弈论", ["博弈", "nim", "sg", "fair"]),
-        ("多项式", ["fft", "ntt", "fwt", "多项式", "卷积"]),
+        (
+            "多项式",
+            [
+                "fft",
+                "ntt",
+                "fwt",
+                "多项式",
+                "卷积",
+                "形式幂级数",
+                "chirp",
+                "指数生成",
+                "egf",
+                "ogf",
+                "常系数",
+                "符号化",
+                "代数基本",
+            ],
+        ),
         ("数值计算", ["快速幂", "快速读", "数值", "牛顿", "积分", "浮点"]),
+        ("概率与统计", ["概率", "随机变量", "条件", "不等式", "数字特征"]),
+        (
+            "代数与数系",
+            [
+                "群论",
+                "环论",
+                "域论",
+                "布尔",
+                "序理论",
+                "复数",
+                "坐标",
+                "进制",
+                "格雷码",
+                "数字系统",
+                "线性规划",
+                "单纯形",
+                "拟阵",
+                "高精度",
+                "位操作",
+                "二进制集合",
+                "插值",
+                "schreier",
+                "berlekamp",
+                "零和",
+            ],
+        ),
     ],
 }
 
@@ -372,6 +559,8 @@ def clean_zuo_title(raw: str) -> str:
     s = re.sub(r"^\d+\.\s*", "", raw)
     # 只去掉明显的修饰前缀（"xxx入门题目-"），保留主题前缀
     s = re.sub(r"^[^ -]+?入门题目-", "", s, count=1)
+    # 去掉 "-上" "-下" 后缀（章节标记，不是知识点名）
+    s = re.sub(r"[-_]\s*[上下]$", "", s)
     return s.strip()
 
 
@@ -549,11 +738,9 @@ def build_specs(entries: list[dict]) -> tuple[list[KnowledgePointSpec], list[Kno
             if not leaf.description:
                 leaf.description = merge[2]
         else:
-            slug = f"zuo-{e['slug']}"
-            clean_name = clean_zuo_title(e["title"])
-            leaf = get_leaf(slug, clean_name, category)
-            if not leaf.description:
-                leaf.description = clean_name
+            # 未命中合并关键词，跳过（不创建左程云独立知识点）
+            # 左程云内容仅用于为已有 OI-wiki 知识点生成讲义
+            continue
         leaf.sources.append("zuo-lecture")
         leaf.merge_difficulty(level_map[0])
         # 设置二级子分类（左程云标题往往带"背包dp-"等前缀，匹配很准）
@@ -643,11 +830,30 @@ def build_specs(entries: list[dict]) -> tuple[list[KnowledgePointSpec], list[Kno
         subtag_used_names.add(final_name)
         spec = KnowledgePointSpec(slug=sub_slug, name=final_name, category=category)
         spec.is_subtag_node = True
-        spec.difficulty = KnowledgePointDifficulty.EASY
+        spec.difficulty = OI_CATEGORY_DIFFICULTY.get(category, KnowledgePointDifficulty.MEDIUM)
         spec.description = f"{category} → {sub_name}（{cnt} 个知识点）"
         spec.order = root_by_cat[category].order + 500 + len(subtag_specs)
         subtag_specs.append(spec)
         subtag_slug_map[(category, sub_name)] = sub_slug
+
+    # 4) 叶子节点与 subtag 同名时，合并叶子到 subtag（避免"区间 DP（动态规划）"冗余）
+    subtag_by_name: dict[str, KnowledgePointSpec] = {}
+    for ss in subtag_specs:
+        subtag_by_name[ss.name] = ss
+    for leaf_slug, leaf in list(leaf_map.items()):
+        if leaf.name in subtag_by_name:
+            target = subtag_by_name[leaf.name]
+            target.lectures.extend(leaf.lectures)
+            target.templates.extend(leaf.templates)
+            target.sources.extend(leaf.sources)
+            if leaf.description and not target.description:
+                target.description = leaf.description
+            if leaf.cf_tag and not target.cf_tag:
+                target.cf_tag = leaf.cf_tag
+                target.cf_problem_count = leaf.cf_problem_count
+            target.merge_difficulty(leaf.difficulty)
+            target.is_subtag_node = False  # 合并后不再是虚拟节点
+            del leaf_map[leaf_slug]
 
     return root_specs, subtag_specs + list(leaf_map.values()), subtag_slug_map
 
