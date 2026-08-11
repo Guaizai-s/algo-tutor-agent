@@ -6,7 +6,7 @@ API:
 - POST /wrongbook/{submission_id}/retry  标记重试
 - GET  /wrongbook/{submission_id}/recommendations  同类题推荐
 
-COMPAT: user_id 显式从查询参数传入，等认证落地后改为 token 解析。
+所有用户范围均由 JWT 当前用户解析，不接受外部 user_id。
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import CurrentUser
 from app.schemas.wrongbook import (
     RetryWrongBookResponse,
     WrongBookDetailResponse,
@@ -39,7 +40,7 @@ router = APIRouter(prefix="/wrongbook", tags=["wrongbook"])
 
 @router.get("", response_model=WrongBookListResponse)
 async def api_list_wrongbook(
-    user_id: UUID = Query(..., description="COMPAT: 认证落地后从 token 解析"),
+    current_user: CurrentUser,
     resolved: bool | None = Query(None),
     knowledge_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
@@ -52,16 +53,16 @@ async def api_list_wrongbook(
         page=page,
         page_size=page_size,
     )
-    return await list_wrongbook(db, user_id, params)
+    return await list_wrongbook(db, current_user.id, params)
 
 
 @router.get("/{submission_id}", response_model=WrongBookDetailResponse)
 async def api_get_wrongbook_detail(
     submission_id: UUID,
-    user_id: UUID = Query(..., description="COMPAT: 认证落地后从 token 解析"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> WrongBookDetailResponse:
-    result = await get_wrongbook_detail(db, submission_id, user_id)
+    result = await get_wrongbook_detail(db, submission_id, current_user.id)
     if result is None:
         raise HTTPException(status_code=404, detail="wrongbook entry not found")
     return result
@@ -70,10 +71,10 @@ async def api_get_wrongbook_detail(
 @router.post("/{submission_id}/retry", response_model=RetryWrongBookResponse)
 async def api_retry_wrongbook(
     submission_id: UUID,
-    user_id: UUID = Query(..., description="COMPAT: 认证落地后从 token 解析"),
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> RetryWrongBookResponse:
-    result = await retry_wrongbook(db, submission_id, user_id)
+    result = await retry_wrongbook(db, submission_id, current_user.id)
     if result is None:
         raise HTTPException(status_code=404, detail="wrongbook entry not found")
     return result
@@ -82,8 +83,8 @@ async def api_retry_wrongbook(
 @router.get("/{submission_id}/recommendations", response_model=list[WrongBookRecommendation])
 async def api_get_recommendations(
     submission_id: UUID,
-    user_id: UUID = Query(..., description="COMPAT: 认证落地后从 token 解析"),
+    current_user: CurrentUser,
     limit: int = Query(5, ge=1, le=20),
     db: AsyncSession = Depends(get_db),
 ) -> list[WrongBookRecommendation]:
-    return await get_recommendations(db, submission_id, user_id, limit)
+    return await get_recommendations(db, submission_id, current_user.id, limit)

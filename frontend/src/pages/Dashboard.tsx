@@ -13,7 +13,7 @@ import {
   ExternalLink,
   Zap,
 } from 'lucide-react'
-import { progressApi, notificationApi, DEV_USER_ID } from '../utils/api'
+import { progressApi, notificationApi } from '../utils/api'
 import { useAuthStore } from '../stores/authStore'
 import type { Progress, RecommendationResponse } from '../types'
 
@@ -27,7 +27,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     progressApi
-      .getOverview(DEV_USER_ID)
+      .getOverview()
       .then((resp) => {
         if (!cancelled) setProgress(resp.data as Progress)
       })
@@ -45,7 +45,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     notificationApi
-      .getRecommendations(DEV_USER_ID)
+      .getRecommendations()
       .then((resp) => {
         if (!cancelled) setRecommendations(resp.data as RecommendationResponse)
       })

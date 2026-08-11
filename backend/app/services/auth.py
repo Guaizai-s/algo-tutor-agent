@@ -1,27 +1,38 @@
-"""Authentication business logic."""
+"""Authentication and external-account binding business logic."""
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
+from app.models.codeforces import CodeforcesAccount
 from app.models.user import User
 from app.schemas.auth import BindCFResponse, ProfileUpdateRequest, RegisterRequest
-from app.services.codeforces.client import (
-    CodeforcesPermanentError,
-    close_codeforces_client,
-    get_codeforces_client,
-)
+from app.services.codeforces.client import CodeforcesClient, CodeforcesPermanentError
 
 
 class UserAlreadyExistsError(Exception):
-    """Raised when an email address or username is already registered."""
-
     def __init__(self, field: str) -> None:
         self.field = field
         super().__init__(f"{field} already registered")
+
+
+class CodeforcesHandleInvalidError(Exception):
+    """The requested Codeforces handle does not exist or is invalid."""
+
+
+class CodeforcesHandleAlreadyBoundError(Exception):
+    """The Codeforces handle belongs to another platform user."""
+
+
+class CodeforcesUnavailableError(Exception):
+    """Codeforces could not be reached or returned a transient failure."""
+
+
+class CodeforcesRebindRequiredError(Exception):
+    """The current user is already bound to a different handle."""
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -51,9 +62,6 @@ async def create_user(db: AsyncSession, payload: RegisterRequest) -> User:
     try:
         await db.flush()
     except IntegrityError as exc:
-        # A concurrent registration can pass the pre-check and lose the
-        # unique-index race. The request transaction will be rolled back by
-        # get_db after the endpoint translates this domain error to HTTP 409.
         raise UserAlreadyExistsError("email or username") from exc
     await db.refresh(user)
     return user
@@ -66,89 +74,95 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     return user
 
 
-async def update_profile(
-    db: AsyncSession,
-    user: User,
-    payload: ProfileUpdateRequest,
-) -> User:
-    """更新用户 ACM 档案字段（部分更新，只设非 None 字段）。"""
-    if payload.school is not None:
-        user.school = payload.school
-    if payload.cf_handle is not None:
-        user.cf_handle = payload.cf_handle
-    if payload.atcoder_handle is not None:
-        user.atcoder_handle = payload.atcoder_handle
-    if payload.target_medal is not None:
-        user.target_medal = payload.target_medal
-    await db.flush()
+async def update_profile(db: AsyncSession, user: User, payload: ProfileUpdateRequest) -> User:
+    """Apply only explicitly supplied profile fields and enforce username uniqueness."""
+    changes = payload.model_dump(exclude_unset=True)
+    if "username" in changes:
+        duplicate = (
+            await db.execute(
+                select(User.id).where(
+                    User.username == changes["username"],
+                    User.id != user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if duplicate is not None:
+            raise UserAlreadyExistsError("username")
+
+    for field, value in changes.items():
+        setattr(user, field, value)
+
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise UserAlreadyExistsError("username") from exc
     await db.refresh(user)
     return user
+
+
+async def get_codeforces_account(db: AsyncSession, user_id) -> CodeforcesAccount | None:
+    return (
+        await db.execute(select(CodeforcesAccount).where(CodeforcesAccount.user_id == user_id))
+    ).scalar_one_or_none()
 
 
 async def bind_cf_handle(
     db: AsyncSession,
     user: User,
     handle: str,
-    cf_client=None,
+    client: CodeforcesClient,
 ) -> BindCFResponse:
-    """绑定 CF handle：调用 CF API 验证 handle 存在，拉取初始数据。
-
-    Args:
-        db: 数据库会话
-        user: 当前用户
-        handle: CF handle
-        cf_client: CodeforcesClient 实例（可选，不传则自动创建）
-
-    Returns:
-        BindCFResponse: 绑定结果含 rating 信息
-
-    Raises:
-        ValueError: CF handle 不存在
-        CodeforcesAPIError: CF API 调用失败
-    """
-    should_close = False
-    if cf_client is None:
-        cf_client = get_codeforces_client()
-        should_close = True
-
+    """Validate and bind a CF handle while preventing duplicate ownership and implicit rebinding."""
     try:
-        # 验证 handle 是否存在
-        user_info_list = await cf_client.user_info(handle)
-        if not user_info_list:
-            raise ValueError(f"Codeforces handle '{handle}' 不存在")
+        result = await client.user_info(handle)
+    except CodeforcesPermanentError as exc:
+        raise CodeforcesHandleInvalidError(handle) from exc
+    except Exception as exc:
+        raise CodeforcesUnavailableError(str(exc)) from exc
 
-        info = user_info_list[0]
-        user.cf_handle = handle
+    if not result:
+        raise CodeforcesHandleInvalidError(handle)
 
-        # 同步到 CodeforcesAccount 表
-        from app.models.codeforces import CodeforcesAccount
+    info = result[0]
+    canonical_handle = str(info.get("handle") or handle)
+    existing_for_user = await get_codeforces_account(db, user.id)
+    if existing_for_user is not None and existing_for_user.handle.lower() != canonical_handle.lower():
+        raise CodeforcesRebindRequiredError(existing_for_user.handle)
 
-        existing = (
-            await db.execute(select(CodeforcesAccount).where(CodeforcesAccount.user_id == user.id))
-        ).scalar_one_or_none()
-        if existing is None:
-            existing = CodeforcesAccount(
-                user_id=user.id,
-                handle=handle,
-                current_rating=info.get("rating"),
-            )
-            db.add(existing)
-        else:
-            existing.handle = handle
-            existing.current_rating = info.get("rating")
-
-        await db.flush()
-        await db.refresh(user)
-
-        return BindCFResponse(
-            handle=handle,
-            current_rating=info.get("rating"),
-            max_rating=info.get("maxRating"),
-            rank=info.get("rank"),
-            message="CF handle 绑定成功",
+    owner = (
+        await db.execute(
+            select(CodeforcesAccount).where(func.lower(CodeforcesAccount.handle) == canonical_handle.lower())
         )
-    except (CodeforcesPermanentError, ValueError) as exc:
-        raise ValueError(str(exc)) from exc
-    finally:
-        if should_close:
-            await close_codeforces_client(cf_client)
+    ).scalar_one_or_none()
+    if owner is not None and owner.user_id != user.id:
+        raise CodeforcesHandleAlreadyBoundError(canonical_handle)
+
+    rating = info.get("rating")
+    if existing_for_user is None:
+        account = CodeforcesAccount(
+            user_id=user.id,
+            handle=canonical_handle,
+            current_rating=int(rating) if rating is not None else None,
+        )
+        db.add(account)
+    else:
+        account = existing_for_user
+        account.handle = canonical_handle
+        account.current_rating = int(rating) if rating is not None else None
+
+    user.cf_handle = canonical_handle
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise CodeforcesHandleAlreadyBoundError(canonical_handle) from exc
+    await db.refresh(account)
+    await db.refresh(user)
+
+    max_rating = info.get("maxRating")
+    return BindCFResponse(
+        handle=canonical_handle,
+        current_rating=int(rating) if rating is not None else None,
+        max_rating=int(max_rating) if max_rating is not None else None,
+        rank=str(info["rank"]) if info.get("rank") is not None else None,
+        message="CF handle bound successfully",
+    )

@@ -398,12 +398,19 @@ async def update_daily_task_item(
     task_id: UUID,
     item_id: UUID,
     status: DailyTaskItemStatus,
+    expected_user_id: UUID,
 ) -> DailyTaskItemUpdateResponse:
     """更新任务项状态（标记完成/跳过），并检查是否触发打卡。
 
     - 状态改为 DONE 时，若全部任务项完成，自动触发打卡
     - 返回当前进度（done/total）和是否触发打卡
     """
+    task = (await db.execute(select(DailyTask).where(DailyTask.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise ValueError(f"DailyTask {task_id} not found")
+    if task.user_id != expected_user_id:
+        raise ValueError(f"DailyTask {task_id} does not belong to the current user")
+
     # 查找任务项
     item = (await db.execute(select(DailyTaskItem).where(DailyTaskItem.id == item_id))).scalar_one_or_none()
     if item is None:
@@ -415,7 +422,6 @@ async def update_daily_task_item(
     await db.flush()
 
     # 统计当前任务进度
-    task = (await db.execute(select(DailyTask).where(DailyTask.id == task_id))).scalar_one()
     done_count = (
         await db.execute(
             select(func.count(DailyTaskItem.id)).where(

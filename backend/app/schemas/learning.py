@@ -52,12 +52,8 @@ class LectureRef(BaseSchema):
 
 
 class LearningPathGenerateRequest(BaseSchema):
-    """生成学习路径请求。
+    """生成当前 JWT 用户的学习路径。"""
 
-    COMPAT: user_id 显式传入，等认证落地后改为从 token 解析。
-    """
-
-    user_id: UUID
     preview_count: int = Field(default=8, ge=5, le=10)
 
 
@@ -81,12 +77,8 @@ class LearningPathRead(BaseSchema):
 
 
 class MarkMasteredRequest(BaseSchema):
-    """标记知识点为已掌握（自评）。
+    """标记当前 JWT 用户的知识点为已掌握（自评）。"""
 
-    COMPAT: user_id 显式传入，等认证落地后改为从 token 解析。
-    """
-
-    user_id: UUID
     knowledge_id: UUID
 
 
@@ -102,16 +94,13 @@ class MarkMasteredResponse(BaseSchema):
 
 
 class AttemptRequest(BaseSchema):
-    """记录一次做题结果（用于驱动路径动态调整）。
-
-    COMPAT: user_id 显式传入。
+    """记录当前 JWT 用户的一次做题结果（用于驱动路径动态调整）。
 
     注意：mastery 由服务端按 spec 计算（AC 题数 / 关联题目总数），
     客户端不得通过 new_mastery 覆盖。该字段保留仅为向后兼容，
     服务端会忽略它（deprecated）。
     """
 
-    user_id: UUID
     knowledge_id: UUID
     problem_id: UUID
     verdict: str = Field(..., description="AC / WA / TLE / RE 等")

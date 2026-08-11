@@ -228,6 +228,38 @@ export interface ActivityResponse {
   total_last_week: number
 }
 
+export interface WrongBookItem {
+  submission_id: string
+  problem_id: string | null
+  problem_title: string | null
+  cf_contest_id: number | null
+  cf_index: string | null
+  verdict: string
+  knowledge_point_names: string[]
+  retry_count: number
+  resolved: boolean
+  submitted_at: string
+  last_retry_at: string | null
+}
+
+export interface WrongBookListResponse {
+  items: WrongBookItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface WrongBookRecommendation {
+  problem_id: string
+  title: string
+  difficulty: string
+  cf_rating: number | null
+  knowledge_point_names: string[]
+  ac_count: number
+  submit_count: number
+}
+
 export interface AuthResponse {
   access_token: string
   token_type: string
@@ -247,8 +279,9 @@ export interface BindCFResponse {
 }
 
 export interface ProfileUpdateRequest {
+  username?: string
+  avatar?: string | null
   school?: string | null
-  cf_handle?: string | null
   atcoder_handle?: string | null
   target_medal?: TargetMedal | null
 }
@@ -363,12 +396,10 @@ export interface LearningPathRead {
 }
 
 export interface LearningPathGenerateRequest {
-  user_id: string
   preview_count?: number
 }
 
 export interface AttemptRequest {
-  user_id: string
   knowledge_id: string
   problem_id: string
   verdict: string
@@ -385,7 +416,6 @@ export interface AttemptResponse {
 }
 
 export interface MarkMasteredRequest {
-  user_id: string
   knowledge_id: string
 }
 

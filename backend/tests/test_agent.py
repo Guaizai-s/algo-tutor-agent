@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import pytest
 
@@ -68,6 +69,85 @@ async def test_agent_plain_answer(db_session, seed_data):
     resp = await agent.run(req)
     assert "动态规划" in resp.message
     assert resp.tool_calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_injects_authenticated_learning_context(
+    db_session,
+    seed_data,
+    auth_user,
+):
+    """OpenAI system prompt receives server-side target and weak-point context, not email."""
+    from app.models.learning import LearningProfile, UserKnowledgeState
+    from app.services.rag import RAGService
+
+    user = auth_user["user"]
+    db_session.add(
+        LearningProfile(
+            user_id=user.id,
+            target_rating_min=1600,
+            target_rating_max=2000,
+        )
+    )
+    db_session.add(
+        UserKnowledgeState(
+            user_id=user.id,
+            knowledge_id=seed_data["knowledge_point_id"],
+            mastery=0.25,
+            is_weak=True,
+            consecutive_wa=3,
+        )
+    )
+    await db_session.flush()
+
+    rag = RAGService.__new__(RAGService)
+    rag._session_factory = None  # type: ignore[attr-defined]
+    rag._openai = None
+    rag._pgvector_available = False
+    openai_svc = _make_openai_mock([_Resp([_Choice(_Message(content="个性化建议"))])])
+    agent = TutorAgent(
+        openai_svc,
+        _DummyFactory(db_session),  # type: ignore[arg-type]
+        rag,
+        user_id=user.id,
+    )
+
+    await agent.run(AgentChatRequest(message="我今天学什么？"))
+
+    call = openai_svc.client.chat.completions.create.await_args
+    system_prompt = call.kwargs["messages"][0]["content"]
+    assert "目标 Rating：1600-2000" in system_prompt
+    assert "薄弱点" in system_prompt
+    assert "掌握度 25%" in system_prompt
+    assert user.email not in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_agent_endpoint_requires_authentication(client):
+    response = await client.post("/api/v1/agent/chat", json={"message": "解释二分查找"})
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_agent_daily_quota(monkeypatch):
+    from app.core.config import settings
+    from app.services.agent_quota import AgentQuotaExceededError, consume_agent_quota
+
+    class FakeRedis:
+        def __init__(self):
+            self.used = 0
+
+        async def eval(self, script, key_count, key, ttl):
+            self.used += 1
+            return self.used
+
+    fake = FakeRedis()
+    monkeypatch.setattr(settings, "AGENT_DAILY_REQUEST_LIMIT", 2)
+
+    assert await consume_agent_quota(UUID(int=1), fake) == (1, 2)  # type: ignore[arg-type]
+    assert await consume_agent_quota(UUID(int=1), fake) == (2, 2)  # type: ignore[arg-type]
+    with pytest.raises(AgentQuotaExceededError):
+        await consume_agent_quota(UUID(int=1), fake)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

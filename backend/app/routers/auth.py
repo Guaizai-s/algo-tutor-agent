@@ -1,4 +1,4 @@
-"""Registration, login, and current-user API endpoints."""
+"""Registration, login, profile, and Codeforces binding endpoints."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser
+from app.core.deps import CodeforcesClientDep, CurrentUser
 from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.auth import (
@@ -19,6 +19,10 @@ from app.schemas.auth import (
     UserRead,
 )
 from app.services.auth import (
+    CodeforcesHandleAlreadyBoundError,
+    CodeforcesHandleInvalidError,
+    CodeforcesRebindRequiredError,
+    CodeforcesUnavailableError,
     UserAlreadyExistsError,
     authenticate_user,
     bind_cf_handle,
@@ -67,7 +71,10 @@ async def update_my_profile(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> UserRead:
-    updated = await update_profile(db, current_user, payload)
+    try:
+        updated = await update_profile(db, current_user, payload)
+    except UserAlreadyExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已被注册") from exc
     return UserRead.model_validate(updated)
 
 
@@ -75,9 +82,19 @@ async def update_my_profile(
 async def bind_codeforces(
     payload: BindCFRequest,
     current_user: CurrentUser,
+    client: CodeforcesClientDep,
     db: AsyncSession = Depends(get_db),
 ) -> BindCFResponse:
     try:
-        return await bind_cf_handle(db, current_user, payload.handle)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        return await bind_cf_handle(db, current_user, payload.handle, client)
+    except CodeforcesHandleInvalidError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Codeforces user not found") from exc
+    except CodeforcesHandleAlreadyBoundError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Codeforces account already bound") from exc
+    except CodeforcesRebindRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Current account is already bound to {exc.args[0]}; explicit rebinding is required",
+        ) from exc
+    except CodeforcesUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Codeforces API unavailable") from exc

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { ProfileUpdateRequest, User } from '../types'
+import type { BindCFResponse, ProfileUpdateRequest, User } from '../types'
 import { authApi } from '../utils/api'
 
 interface AuthState {
@@ -12,7 +12,7 @@ interface AuthState {
   logout: () => void
   loadUser: () => Promise<void>
   updateProfile: (data: ProfileUpdateRequest) => Promise<void>
-  bindCF: (handle: string) => Promise<void>
+  bindCF: (handle: string) => Promise<BindCFResponse>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -79,11 +79,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   bindCF: async (handle: string) => {
-    await authApi.bindCF({ handle })
+    const bindResponse = await authApi.bindCF({ handle })
     // 绑定成功后刷新用户信息（cf_handle 已写入 User 表）
     const response = await authApi.getProfile()
     const user = response.data
     localStorage.setItem('user', JSON.stringify(user))
     set({ user })
+    return bindResponse.data
   },
 }))

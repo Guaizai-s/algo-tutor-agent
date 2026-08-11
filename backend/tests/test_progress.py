@@ -337,15 +337,15 @@ async def test_recompute_all_user_knowledge(db_session: AsyncSession, kp_with_pr
 # ===== 9. API 集成测试 =====
 
 
-async def test_api_progress_overview(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID]):
+async def test_api_progress_overview(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID], auth_user):
     """API: GET /api/v1/progress/overview。"""
-    user_id = uuid4()
+    user_id = auth_user["user"].id
     db_session.add(UserProblemAC(user_id=user_id, problem_id=kp_with_problems["p0"]))
     await db_session.flush()
 
     resp = await client.get(
         "/api/v1/progress/overview",
-        params={"user_id": str(user_id)},
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -357,9 +357,9 @@ async def test_api_progress_overview(client, db_session: AsyncSession, kp_with_p
     assert "weak_knowledge_ids" in data
 
 
-async def test_api_recompute_mastery(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID]):
+async def test_api_recompute_mastery(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID], auth_user):
     """API: POST /api/v1/progress/recompute。"""
-    user_id = uuid4()
+    user_id = auth_user["user"].id
     db_session.add(UserProblemAC(user_id=user_id, problem_id=kp_with_problems["p0"]))
     db_session.add(
         UserKnowledgeState(
@@ -375,9 +375,9 @@ async def test_api_recompute_mastery(client, db_session: AsyncSession, kp_with_p
     resp = await client.post(
         "/api/v1/progress/recompute",
         json={
-            "user_id": str(user_id),
             "knowledge_id": str(kp_with_problems["kp1"]),
         },
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -647,9 +647,9 @@ async def test_recompute_creates_state_from_ac_only(db_session: AsyncSession, kp
 # ===== 20. progress overview API 返回正确的 weak_knowledge_ids =====
 
 
-async def test_api_weak_knowledge_ids(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID]):
+async def test_api_weak_knowledge_ids(client, db_session: AsyncSession, kp_with_problems: dict[str, UUID], auth_user):
     """API: GET /api/v1/progress/overview 的 weak_knowledge_ids 严格按 spec。"""
-    user_id = uuid4()
+    user_id = auth_user["user"].id
     # KP1 mastery=0.3（weak），KP2 mastery=0.0（未学，不算 weak）
     db_session.add(
         UserKnowledgeState(
@@ -673,7 +673,7 @@ async def test_api_weak_knowledge_ids(client, db_session: AsyncSession, kp_with_
 
     resp = await client.get(
         "/api/v1/progress/overview",
-        params={"user_id": str(user_id)},
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -688,16 +688,15 @@ async def test_api_weak_knowledge_ids(client, db_session: AsyncSession, kp_with_
 # ===== 21. 不存在的 knowledge_id 返回 404 =====
 
 
-async def test_recompute_nonexistent_knowledge_404(client):
+async def test_recompute_nonexistent_knowledge_404(client, auth_user):
     """API: POST /api/v1/progress/recompute 对不存在的 knowledge_id 返回 404。"""
-    user_id = uuid4()
     fake_kp = uuid4()
 
     resp = await client.post(
         "/api/v1/progress/recompute",
         json={
-            "user_id": str(user_id),
             "knowledge_id": str(fake_kp),
         },
+        headers=auth_user["headers"],
     )
     assert resp.status_code == 404

@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Sparkles,
 } from 'lucide-react'
-import { dailyTaskApi, learningApi, DEV_USER_ID } from '../utils/api'
+import { dailyTaskApi, learningApi } from '../utils/api'
 import type {
   DailyTaskItemRead,
   DailyTaskItemUpdateResponse,
@@ -31,18 +31,15 @@ const TodayTask: React.FC = () => {
     setError(null)
     try {
       try {
-        await learningApi.getCurrentPath(DEV_USER_ID)
+        await learningApi.getCurrentPath()
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status
         if (status !== 404) {
           throw err
         }
-        await learningApi.generatePath({
-          user_id: DEV_USER_ID,
-          preview_count: 8,
-        })
+        await learningApi.generatePath({ preview_count: 8 })
       }
-      const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
+      const todayResp = await dailyTaskApi.getToday()
       setData(todayResp.data)
       // 从服务器数据初始化进度
       const items = todayResp.data.task.items
@@ -91,11 +88,8 @@ const TodayTask: React.FC = () => {
     setRegenerating(true)
     setError(null)
     try {
-      await learningApi.generatePath({
-        user_id: DEV_USER_ID,
-        preview_count: 8,
-      })
-      const todayResp = await dailyTaskApi.getToday(DEV_USER_ID)
+      await learningApi.generatePath({ preview_count: 8 })
+      const todayResp = await dailyTaskApi.getToday()
       setData(todayResp.data)
       const items = todayResp.data.task.items
       const done = items.filter((i) => i.status === 'done').length

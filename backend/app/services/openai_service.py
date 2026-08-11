@@ -42,4 +42,6 @@ def get_openai() -> OpenAIService:
 
     if openai_service is None:
         raise HTTPException(status_code=503, detail="OpenAI service not ready")
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="OpenAI API key not configured")
     return openai_service

@@ -86,12 +86,8 @@ class ProgressOverviewResponse(BaseSchema):
 
 
 class RecomputeMasteryRequest(BaseSchema):
-    """POST /api/v1/progress/recompute 请求。
+    """POST /api/v1/progress/recompute 请求。"""
 
-    COMPAT: user_id 显式传入。
-    """
-
-    user_id: UUID
     knowledge_id: UUID | None = Field(
         default=None,
         description="指定知识点 ID；None 时重算用户所有知识点 mastery",

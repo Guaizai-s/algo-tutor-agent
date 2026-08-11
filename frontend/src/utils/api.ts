@@ -17,6 +17,8 @@ import type {
   ProfileUpdateRequest,
   RoadmapResponse,
   User,
+  WrongBookListResponse,
+  WrongBookRecommendation,
 } from '../types'
 
 const api = axios.create({
@@ -86,28 +88,32 @@ export const agentApi = {
 }
 
 export const progressApi = {
-  getOverview: (userId: string) => api.get('/progress/overview', { params: { user_id: userId } }),
-  getActivity: (userId: string, days = 30) =>
-    api.get('/progress/activity', { params: { user_id: userId, days } }),
-  getWrongAnswers: () => api.get('/progress/wrong-answers', { params: { user_id: DEV_USER_ID } }),
-  recomputeMastery: (userId: string, knowledgeId?: string) =>
-    api.post('/progress/recompute', { user_id: userId, knowledge_id: knowledgeId ?? null }),
+  getOverview: () => api.get('/progress/overview'),
+  getActivity: (days = 30) => api.get('/progress/activity', { params: { days } }),
+  getWrongAnswers: () => api.get('/progress/wrong-answers'),
+  recomputeMastery: (knowledgeId?: string) =>
+    api.post('/progress/recompute', { knowledge_id: knowledgeId ?? null }),
+}
+
+export const wrongbookApi = {
+  list: (params?: { resolved?: boolean; page?: number; page_size?: number }) =>
+    api.get<WrongBookListResponse>('/wrongbook', { params }),
+  retry: (submissionId: string) => api.post(`/wrongbook/${submissionId}/retry`),
+  recommendations: (submissionId: string) =>
+    api.get<WrongBookRecommendation[]>(`/wrongbook/${submissionId}/recommendations`),
 }
 
 export const reviewApi = {
-  getList: () => api.get('/review/list', { params: { user_id: DEV_USER_ID } }),
-  getStatus: () => api.get('/review/status', { params: { user_id: DEV_USER_ID } }),
+  getList: () => api.get('/review/list'),
+  getStatus: () => api.get('/review/status'),
   submitReview: (id: string, correct: boolean) => api.post(`/review/${id}/submit`, { correct }),
 }
 
 export const notificationApi = {
-  list: () => api.get('/notifications', { params: { user_id: DEV_USER_ID } }),
-  markAsRead: (id: string) =>
-    api.post(`/notifications/${id}/read`, null, { params: { user_id: DEV_USER_ID } }),
-  markAllAsRead: () =>
-    api.post('/notifications/read-all', null, { params: { user_id: DEV_USER_ID } }),
-  getRecommendations: (userId: string) =>
-    api.get('/notifications/recommendations', { params: { user_id: userId } }),
+  list: () => api.get('/notifications'),
+  markAsRead: (id: string) => api.post(`/notifications/${id}/read`),
+  markAllAsRead: () => api.post('/notifications/read-all'),
+  getRecommendations: () => api.get('/notifications/recommendations'),
 }
 
 export const discussionApi = {
@@ -125,23 +131,14 @@ export const discussionApi = {
 
 // ===== Task 10: Learning path & daily task =====
 
-/**
- * 开发期固定的 user_id（COMPAT: 认证落地后从 token 解析）。
- * 使用一个稳定 UUID，避免每次刷新生成新用户。
- * 该 UUID 仅用于本地开发调用 Task 10 API，不与真实用户绑定。
- */
-export const DEV_USER_ID = '00000000-0000-4000-8000-000000000001'
-
 export const learningApi = {
   /** 生成（或重新生成）学习路径。 */
   generatePath: (req: LearningPathGenerateRequest) =>
     api.post<LearningPathRead>('/learning-paths/generate', req),
   /** 获取当前 active 学习路径。 */
-  getCurrentPath: (userId: string) =>
-    api.get<LearningPathRead>('/learning-paths/current', { params: { user_id: userId } }),
+  getCurrentPath: () => api.get<LearningPathRead>('/learning-paths/current'),
   /** 获取路线图聚合数据：知识树 + 用户学习状态。 */
-  getRoadmap: (userId: string) =>
-    api.get<RoadmapResponse>('/learning-paths/roadmap', { params: { user_id: userId } }),
+  getRoadmap: () => api.get<RoadmapResponse>('/learning-paths/roadmap'),
   /** 记录一次做题结果，触发路径动态调整。 */
   recordAttempt: (req: AttemptRequest) =>
     api.post<AttemptResponse>('/learning-paths/attempts', req),
@@ -152,14 +149,12 @@ export const learningApi = {
 
 export const coldstartApi = {
   /** CF 冷启动：拉取 CF 提交记录，映射知识点。 */
-  cfColdStart: (userId: string) =>
-    api.post<ColdStartResultResponse>('/coldstart/cf', null, { params: { user_id: userId } }),
+  cfColdStart: () => api.post<ColdStartResultResponse>('/coldstart/cf'),
 }
 
 export const dailyTaskApi = {
   /** 获取今日任务（幂等）。 */
-  getToday: (userId: string) =>
-    api.get<DailyTaskTodayResponse>('/daily-tasks/today', { params: { user_id: userId } }),
+  getToday: () => api.get<DailyTaskTodayResponse>('/daily-tasks/today'),
   /** 更新任务项状态（标记完成/跳过）。 */
   updateItem: (taskId: string, itemId: string, status: 'done' | 'skipped') =>
     api.patch<DailyTaskItemUpdateResponse>(`/daily-tasks/${taskId}/items/${itemId}`, { status }),
