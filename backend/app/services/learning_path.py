@@ -30,6 +30,7 @@ from app.models.learning import (
     PathItemKind,
     PathItemStatus,
     UserKnowledgeState,
+    UserLectureRead,
 )
 from app.schemas.learning import (
     AttemptResponse,
@@ -671,6 +672,16 @@ async def get_roadmap_data(
     # 3. 加载用户状态
     user_states = await _load_user_states(db, user_id)
 
+    # 3b. 加载讲义阅读记录（理论知识验收）
+    lecture_read_rows = (
+        await db.execute(
+            select(UserLectureRead.knowledge_id, func.count(UserLectureRead.id))
+            .where(UserLectureRead.user_id == user_id)
+            .group_by(UserLectureRead.knowledge_id)
+        )
+    ).all()
+    lecture_read_map = {kid: cnt for kid, cnt in lecture_read_rows}
+
     # 4. 加载用户当前学习路径
     path_stmt = (
         select(LearningPath)
@@ -734,6 +745,9 @@ async def get_roadmap_data(
                 mastery=st.mastery if st else None,
                 is_weak=st.is_weak if st else False,
                 path_position=path_item.position if path_item else None,
+                theory_done=lecture_read_map.get(kid, 0) > 0,
+                practice_mastery=st.mastery if st else None,
+                theory_lecture_count=lecture_read_map.get(kid, 0),
             )
         )
 

@@ -3,6 +3,7 @@
 包含：
 - UserKnowledgeState: 用户-知识点掌握度、weak 标记、连续 WA 计数
 - UserProblemAC: 用户-题目 AC 状态（用于推荐排除已 AC 题目）
+- UserLectureRead: 用户-讲义阅读状态（用于追踪理论知识验收）
 - UserLearningProfile: 用户训练目标 rating 区间（铜/银/金/高级）
 - LearningPath / LearningPathItem: 用户当前学习路径及路径项目
 - DailyTask / DailyTaskItem: 当日任务及任务项
@@ -28,7 +29,7 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
-    from app.models.knowledge import KnowledgePoint
+    from app.models.knowledge import KnowledgePoint, Lecture
     from app.models.problem import Problem
 
 
@@ -81,6 +82,33 @@ class UserProblemAC(UUIDMixin, TimestampMixin, Base):
     )
 
     problem: Mapped[Problem] = relationship("Problem")
+
+
+class UserLectureRead(UUIDMixin, TimestampMixin, Base):
+    """用户-讲义阅读状态。
+
+    COMPAT: user_id 暂无外键。
+    记录用户是否已阅读某知识点下的讲义，用于理论知识验收。
+    """
+
+    __tablename__ = "user_lecture_reads"
+    __table_args__ = (UniqueConstraint("user_id", "lecture_id", name="uq_user_lecture"),)
+
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    lecture_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("lectures.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    knowledge_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    lecture: Mapped[Lecture] = relationship("Lecture")
 
 
 class LearningProfile(UUIDMixin, TimestampMixin, Base):

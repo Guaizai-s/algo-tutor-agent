@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertCircle,
   BookOpen,
+  Brain,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -14,8 +15,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { knowledgeApi, learningApi, coldstartApi } from '../utils/api'
-import type { KnowledgePointRef, RoadmapKnowledgeNode, RoadmapNodeStatus } from '../types'
+import { knowledgeApi, learningApi, coldstartApi, dailyTaskApi, DEV_USER_ID } from '../utils/api'
+import type { KnowledgePointRef, RoadmapKnowledgeNode, RoadmapNodeStatus, DailyTaskTodayResponse } from '../types'
 
 interface KnowledgeNode extends RoadmapKnowledgeNode {
   children: KnowledgeNode[]
@@ -104,15 +105,21 @@ const KnowledgeTree: React.FC = () => {
   const [markingMastered, setMarkingMastered] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<RoadmapNodeStatus | 'all'>('all')
+  const [todayTask, setTodayTask] = useState<DailyTaskTodayResponse | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      // 并行加载知识树和路线图状态
-      const [treeResp, roadmapResp] = await Promise.all([
+      // 并行加载知识树、路线图状态和今日任务
+      const [treeResp, roadmapResp, todayResp] = await Promise.all([
         knowledgeApi.getTree(),
+<<<<<<< HEAD
         learningApi.getRoadmap().catch(() => null),
+=======
+        learningApi.getRoadmap(DEV_USER_ID).catch(() => null),
+        dailyTaskApi.getToday(DEV_USER_ID).catch(() => null),
+>>>>>>> 931ba58 (feat: 路线图与今日任务联动 + 理论/实践双维度验收)
       ])
 
       const kpItems = treeResp.data as Array<{
@@ -140,6 +147,13 @@ const KnowledgeTree: React.FC = () => {
         setPathPreview([])
       }
 
+      // 今日任务
+      if (todayResp) {
+        setTodayTask(todayResp.data)
+      } else {
+        setTodayTask(null)
+      }
+
       // 合并：以知识树结构为主，附加 roadmap 状态
       const byId = new Map<string, KnowledgeNode>()
       for (const kp of kpItems) {
@@ -157,6 +171,9 @@ const KnowledgeTree: React.FC = () => {
           mastery: rm?.mastery ?? null,
           is_weak: rm?.is_weak ?? false,
           path_position: rm?.path_position ?? null,
+          theory_done: rm?.theory_done ?? false,
+          practice_mastery: rm?.practice_mastery ?? null,
+          theory_lecture_count: rm?.theory_lecture_count ?? 0,
           children: [],
         })
       }
@@ -440,6 +457,38 @@ const KnowledgeTree: React.FC = () => {
             )}
           </div>
 
+          {/* 双维度进度（仅叶子节点且非根） */}
+          {!hasChildren && !isRoot && (node.theory_done || node.practice_mastery != null) && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {node.lecture_count > 0 && (
+                <span
+                  className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded ${
+                    node.theory_done
+                      ? 'bg-green-50 text-green-600'
+                      : 'bg-gray-100 text-gray-400'
+                  }`}
+                  title={node.theory_done ? '讲义已读' : '讲义未读'}
+                >
+                  <BookOpen size={10} />
+                  {node.theory_done ? '已读' : '未读'}
+                </span>
+              )}
+              {node.practice_mastery != null && node.practice_mastery > 0 && (
+                <span
+                  className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded ${
+                    (node.practice_mastery ?? 0) >= 0.8
+                      ? 'bg-green-50 text-green-600'
+                      : 'bg-yellow-50 text-yellow-600'
+                  }`}
+                  title={`实践 mastery: ${Math.round((node.practice_mastery ?? 0) * 100)}%`}
+                >
+                  <Brain size={10} />
+                  {Math.round((node.practice_mastery ?? 0) * 100)}%
+                </span>
+              )}
+            </div>
+          )}
+
           {/* 自评"已掌握"按钮（仅叶子节点，非 done 状态） */}
           {!hasChildren && node.status !== 'done' && (
             <button
@@ -452,7 +501,7 @@ const KnowledgeTree: React.FC = () => {
               className="flex-shrink-0 text-xs px-2 py-0.5 rounded border border-green-300 text-green-600 hover:bg-green-50 disabled:opacity-50 transition-colors"
               title="标记为已掌握"
             >
-              {markingMastered.has(node.id) ? '...' : '已掌握'}
+              {markingMastered.has(node.id) ? '...' : '标记为已掌握'}
             </button>
           )}
         </div>
@@ -517,6 +566,48 @@ const KnowledgeTree: React.FC = () => {
                 )}
               </React.Fragment>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 今日任务置顶卡片 */}
+      {todayTask && !loading && !error && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-5 shadow-sm border border-blue-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
+                <Target size={20} className="text-white" />
+              </div>
+              <div>
+                <p className="text-xs text-blue-600 font-medium">今日任务</p>
+                <Link
+                  to={`/knowledge/${todayTask.task.knowledge.id}`}
+                  className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                >
+                  {todayTask.task.knowledge.name}
+                </Link>
+                {todayTask.task.is_remediation && (
+                  <span className="ml-2 text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">
+                    补漏
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs text-gray-500">任务进度</p>
+                <p className="text-sm font-semibold text-gray-700">
+                  {todayTask.task.items.filter((i) => i.status === 'done').length}/
+                  {todayTask.task.items.length}
+                </p>
+              </div>
+              <Link
+                to="/today-task"
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                去完成 →
+              </Link>
+            </div>
           </div>
         </div>
       )}

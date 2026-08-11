@@ -25,6 +25,7 @@ const TodayTask: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [regenerating, setRegenerating] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [autoMastered, setAutoMastered] = useState(false)
 
   const loadAll = async () => {
     setLoading(true)
@@ -78,6 +79,9 @@ const TodayTask: React.FC = () => {
         }
       })
       setProgress({ done: result.task_done, total: result.task_total })
+      if (result.auto_mastered) {
+        setAutoMastered(true)
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '更新任务状态失败'
       setError(msg)
@@ -194,6 +198,19 @@ const TodayTask: React.FC = () => {
           <div>
             <p className="font-semibold text-green-800">今日任务全部完成!</p>
             <p className="text-sm text-green-600 mt-1">已自动打卡，明天继续加油</p>
+          </div>
+        </div>
+      )}
+
+      {/* 自动掌握提示 */}
+      {autoMastered && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 flex items-center gap-4">
+          <Sparkles className="text-indigo-500 flex-shrink-0" size={28} />
+          <div>
+            <p className="font-semibold text-indigo-800">已自动标记为已掌握!</p>
+            <p className="text-sm text-indigo-600 mt-1">
+              该知识点已达到掌握标准，学习路径已自动推进到下一个知识点
+            </p>
           </div>
         </div>
       )}

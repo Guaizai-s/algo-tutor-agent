@@ -474,6 +474,7 @@ export interface DailyTaskItemUpdateResponse {
   task_total: number
   all_done: boolean
   check_in: boolean
+  auto_mastered: boolean
 }
 
 // ===== Roadmap (路线图视图) =====
@@ -493,6 +494,9 @@ export interface RoadmapKnowledgeNode {
   mastery: number | null
   is_weak: boolean
   path_position: number | null
+  theory_done: boolean
+  practice_mastery: number | null
+  theory_lecture_count: number
 }
 
 export interface RoadmapResponse {
@@ -522,4 +526,30 @@ export interface RecommendationItem {
 export interface RecommendationResponse {
   user_id: string
   items: RecommendationItem[]
+}
+
+// ===== 提交记录 =====
+
+export interface SubmissionRead {
+  id: string
+  cf_submission_id: number | null
+  user_id: string
+  problem_id: string | null
+  problem_title: string | null
+  contest_id: number | null
+  problem_index: string | null
+  verdict: string
+  programming_language: string
+  submitted_at: string
+  time_consumed_ms: number
+  memory_consumed_bytes: number
+  passed_test_count: number
+}
+
+export interface SubmissionListResponse {
+  items: SubmissionRead[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
 }

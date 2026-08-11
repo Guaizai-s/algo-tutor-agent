@@ -34,6 +34,7 @@ from app.models.learning import (
     LearningPathItem,
     PathItemKind,
     PathItemStatus,
+    UserLectureRead,
 )
 from app.models.problem import Problem
 from app.schemas.learning import (
@@ -402,9 +403,12 @@ async def update_daily_task_item(
 ) -> DailyTaskItemUpdateResponse:
     """更新任务项状态（标记完成/跳过），并检查是否触发打卡。
 
-    - 状态改为 DONE 时，若全部任务项完成，自动触发打卡
+    - 状态改为 DONE 时：
+      - 若为 lecture_card：记录 UserLectureRead（理论知识验收）
+      - 若全部任务项完成：自动触发 mastery 重算 + 标记已掌握
     - 返回当前进度（done/total）和是否触发打卡
     """
+    # 先加载 task（后续多项逻辑需用到 user_id / knowledge_id）
     task = (await db.execute(select(DailyTask).where(DailyTask.id == task_id))).scalar_one_or_none()
     if task is None:
         raise ValueError(f"DailyTask {task_id} not found")
@@ -421,6 +425,22 @@ async def update_daily_task_item(
     item.status = status
     await db.flush()
 
+    # 讲义完成时记录阅读
+    if status == DailyTaskItemStatus.DONE and item.item_type == DailyTaskItemType.LECTURE_CARD and item.lecture_id:
+        existing = (
+            await db.execute(
+                select(UserLectureRead).where(
+                    UserLectureRead.user_id == task.user_id,
+                    UserLectureRead.lecture_id == item.lecture_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            lec = (await db.execute(select(Lecture).where(Lecture.id == item.lecture_id))).scalar_one_or_none()
+            if lec:
+                db.add(UserLectureRead(user_id=task.user_id, lecture_id=item.lecture_id, knowledge_id=lec.knowledge_id))
+                await db.flush()
+
     # 统计当前任务进度
     done_count = (
         await db.execute(
@@ -434,13 +454,52 @@ async def update_daily_task_item(
         await db.execute(select(func.count(DailyTaskItem.id)).where(DailyTaskItem.task_id == task_id))
     ).scalar_one()
 
-    # 全部完成时触发打卡
+    # 全部完成时触发打卡 + 自动 mastery 检查
     check_in = False
+    auto_mastered = False
     if done_count >= total_items and total_items > 0:
-        from app.services.progress import do_check_in
+        from app.services.progress import do_check_in, recompute_mastery_for_knowledge
 
         check_in_result = await do_check_in(db, task.user_id)
         check_in = check_in_result.is_today_checked
+
+        # 自动重算 mastery（实践维度）并标记路径项为 DONE
+        new_mastery = await recompute_mastery_for_knowledge(db, task.user_id, task.knowledge_id)
+
+        # 判断是否应自动标记为已掌握：
+        # - 实践 mastery >= 0.8（做题够了）
+        # - 或者该知识点无题目但讲义已读（纯理论知识）
+        should_master = new_mastery >= 0.8
+        if not should_master:
+            from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
+
+            problem_count = (
+                await db.execute(
+                    select(func.count(func.distinct(ProblemKnowledgePoint.problem_id)))
+                    .join(Problem, Problem.id == ProblemKnowledgePoint.problem_id)
+                    .where(
+                        ProblemKnowledgePoint.knowledge_id == task.knowledge_id,
+                        Problem.status == ProblemStatus.PUBLISHED,
+                    )
+                )
+            ).scalar_one()
+            if problem_count == 0:
+                # 纯理论知识：有讲义阅读记录即认为已掌握
+                lecture_read_count = (
+                    await db.execute(
+                        select(func.count(UserLectureRead.id)).where(
+                            UserLectureRead.user_id == task.user_id,
+                            UserLectureRead.knowledge_id == task.knowledge_id,
+                        )
+                    )
+                ).scalar_one()
+                should_master = lecture_read_count > 0
+
+        if should_master:
+            from app.services.learning_path import mark_knowledge_mastered
+
+            await mark_knowledge_mastered(db, task.user_id, task.knowledge_id)
+            auto_mastered = True
 
     # 构建 item read
     item_read = await _build_item_read(db, item)
@@ -451,6 +510,7 @@ async def update_daily_task_item(
         task_total=total_items,
         all_done=done_count >= total_items,
         check_in=check_in,
+        auto_mastered=auto_mastered,
     )
 
 

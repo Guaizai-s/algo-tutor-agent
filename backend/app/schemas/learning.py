@@ -176,6 +176,7 @@ class DailyTaskItemUpdateResponse(BaseSchema):
     task_total: int = Field(0, description="当前任务总项数")
     all_done: bool = Field(False, description="是否全部完成")
     check_in: bool = Field(False, description="本次是否触发了打卡")
+    auto_mastered: bool = Field(False, description="是否自动标记知识点为已掌握")
 
 
 # ===== Roadmap view (路线图视图) =====
@@ -197,6 +198,10 @@ class RoadmapKnowledgeNode(BaseSchema):
     mastery: float | None = None
     is_weak: bool = False
     path_position: int | None = None
+    # 双维度进度：理论（讲义阅读）+ 实践（题目 AC）
+    theory_done: bool = Field(False, description="讲义已读（理论知识验收）")
+    practice_mastery: float | None = Field(None, description="实践 mastery（AC 题数/关联题总数）")
+    theory_lecture_count: int = Field(0, description="该知识点已读讲义数（分母为 lecture_count）")
 
 
 class RoadmapResponse(BaseSchema):
