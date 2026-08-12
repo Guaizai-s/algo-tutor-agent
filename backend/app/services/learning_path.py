@@ -382,7 +382,8 @@ async def record_attempt(
     客户端传入的 new_mastery 被忽略（deprecated）。
 
     规则：
-    - AC：重置 consecutive_wa=0；写入 UserProblemAC；按 AC/总数 重算 mastery；
+    - AC：写入 UserProblemAC；按 AC/总数 重算 mastery（P1-2：基于本次 AC 前的
+      连续 WA 叠加惩罚信号），随后重置 consecutive_wa=0；
       若 mastery ≥ 0.8 则清除 weak 并把对应路径项恢复为 normal；
       若 mastery ≥ 0.8 则把该知识点路径项标记为 DONE。
     - WA：consecutive_wa += 1；不改 mastery；
@@ -416,13 +417,13 @@ async def record_attempt(
     if is_ac:
         # 1) 记录 AC 到 UserProblemAC（业务闭环：推荐会排除已 AC 题目）
         await _record_problem_ac(db, user_id, problem_id)
-        # 2) 重置连续 WA
-        state.consecutive_wa = 0
-        # 3) AC 时自动重算 mastery = AC 题数 / 关联题目总数（Task 11）
+        # 2) P1-2：先基于"本次 AC 前的连续 WA"重算 mastery（含连续 WA 惩罚信号），再清零。
         #    spec: mastery 必须由服务端计算，客户端 new_mastery 被忽略（deprecated）。
         from app.services.progress import recompute_mastery_for_knowledge
 
         state.mastery = await recompute_mastery_for_knowledge(db, user_id, knowledge_id)
+        # 3) 重置连续 WA
+        state.consecutive_wa = 0
         # 4) mastery ≥ 0.8 → 清除 weak，并把路径项恢复为 normal
         if state.mastery >= MASTERY_THRESHOLD:
             state.is_weak = False

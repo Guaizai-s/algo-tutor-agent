@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.models.codeforces import RatingHistory, Submission
 from app.models.knowledge import KnowledgePoint
 from app.models.learning import (
+    CONSECUTIVE_WA_THRESHOLD,
     MASTERY_THRESHOLD,
     WEAK_MASTERY_THRESHOLD,
     CheckIn,
@@ -460,8 +461,16 @@ async def recompute_mastery(
     recomputed = 0
     updated = 0
     for kid in target_ids:
-        old_mastery, old_weak = await _load_state(db, user_id, kid)
-        new_mastery = await _compute_mastery_for_knowledge(db, user_id, kid)
+        state = await _load_state(db, user_id, kid)
+        old_mastery = state.mastery if state else 0.0
+        old_weak = state.is_weak if state else False
+        base = await _compute_mastery_for_knowledge(db, user_id, kid)
+        # P1-2：基线之上叠加多信号（连续 WA 惩罚、时间衰减）
+        new_mastery = apply_mastery_signals(
+            base,
+            consecutive_wa=state.consecutive_wa if state else 0,
+            last_active_at=state.updated_at if state else None,
+        )
 
         # 即使 mastery 数值没变，也可能需要修正错误的 is_weak
         new_weak = _classify_weak(new_mastery, old_weak)
@@ -509,11 +518,20 @@ async def recompute_mastery_for_knowledge(
 ) -> float:
     """重算单个知识点的 mastery 并写入 UserKnowledgeState。
 
+    P1-2 起，在 AC/总数 基线之上叠加多信号（连续 WA 惩罚、时间衰减），
+    见 apply_mastery_signals。
     供 Task 10 的 record_attempt(AC) 调用，实现 AC 时自动重算。
     返回更新后的 mastery 值。
     """
-    new_mastery = await _compute_mastery_for_knowledge(db, user_id, knowledge_id)
-    old_mastery, old_weak = await _load_state(db, user_id, knowledge_id)
+    base = await _compute_mastery_for_knowledge(db, user_id, knowledge_id)
+    state = await _load_state(db, user_id, knowledge_id)
+    old_mastery = state.mastery if state else 0.0
+    old_weak = state.is_weak if state else False
+    new_mastery = apply_mastery_signals(
+        base,
+        consecutive_wa=state.consecutive_wa if state else 0,
+        last_active_at=state.updated_at if state else None,
+    )
     new_weak = _classify_weak(new_mastery, old_weak)
     if new_mastery != old_mastery or new_weak != old_weak:
         await _upsert_state(db, user_id, knowledge_id, new_mastery, new_weak)
@@ -537,6 +555,51 @@ def _classify_weak(mastery: float, old_weak: bool) -> bool:
     if mastery >= MASTERY_THRESHOLD:
         return False
     return old_weak
+
+
+# ===== P1-2 多信号 mastery 参数 =====
+
+# 连续 WA 惩罚：达到 CONSECUTIVE_WA_THRESHOLD(=3) 后，每多一次连续 WA 扣减一步，封顶
+WA_PENALTY_STEP = 0.03
+WA_PENALTY_CAP = 0.12
+# 时间衰减（遗忘曲线）：超过 grace 天无活动后按天线性衰减，封底
+INACTIVE_GRACE_DAYS = 7
+TIME_DECAY_PER_DAY = 0.05
+TIME_DECAY_FLOOR = 0.5
+
+
+def apply_mastery_signals(
+    base: float,
+    consecutive_wa: int = 0,
+    last_active_at: datetime | None = None,
+    now: datetime | None = None,
+) -> float:
+    """多信号调整 mastery（P1-2 掌握度升级）。
+
+    在 spec 基线（AC 题数 / 关联题目总数）之上叠加两个信号：
+    1. 连续 WA 惩罚：consecutive_wa >= 3 说明"多次失败后才 AC"，掌握质量打折，
+       每多一次连续 WA 扣减 WA_PENALTY_STEP，封顶 WA_PENALTY_CAP。
+    2. 时间衰减（遗忘曲线）：距上次活动超过 INACTIVE_GRACE_DAYS 天后按天线性
+       衰减（每天 TIME_DECAY_PER_DAY），封底 TIME_DECAY_FLOOR；长期不练习的
+       知识点掌握度回落，从而重新进入薄弱诊断与推荐范围。
+
+    返回 0~1 的调整后 mastery。
+    """
+    adjusted = base
+
+    # 信号 1：连续 WA（3 次起扣）
+    if consecutive_wa >= CONSECUTIVE_WA_THRESHOLD:
+        penalty = min((consecutive_wa - CONSECUTIVE_WA_THRESHOLD + 1) * WA_PENALTY_STEP, WA_PENALTY_CAP)
+        adjusted -= penalty
+
+    # 信号 2：时间衰减（遗忘曲线）
+    if last_active_at is not None:
+        now = now or datetime.now(UTC)
+        days = (now - last_active_at).days
+        if days > INACTIVE_GRACE_DAYS:
+            adjusted *= max(TIME_DECAY_FLOOR, 1.0 - (days - INACTIVE_GRACE_DAYS) * TIME_DECAY_PER_DAY)
+
+    return max(0.0, min(1.0, adjusted))
 
 
 async def _compute_mastery_for_knowledge(db: AsyncSession, user_id: UUID, knowledge_id: UUID) -> float:
@@ -593,9 +656,12 @@ async def _count_distinct_ac_in_knowledge(db: AsyncSession, user_id: UUID, knowl
     ).scalar_one()
 
 
-async def _load_state(db: AsyncSession, user_id: UUID, knowledge_id: UUID) -> tuple[float, bool]:
-    """加载现有 UserKnowledgeState 的 (mastery, is_weak)。若无记录返回 (0.0, False)。"""
-    state = (
+async def _load_state(db: AsyncSession, user_id: UUID, knowledge_id: UUID) -> UserKnowledgeState | None:
+    """加载现有 UserKnowledgeState 完整行（含 consecutive_wa / updated_at 供多信号使用）。
+
+    无记录时返回 None（对应 mastery=0.0、is_weak=False、无信号）。
+    """
+    return (
         await db.execute(
             select(UserKnowledgeState).where(
                 UserKnowledgeState.user_id == user_id,
@@ -603,9 +669,6 @@ async def _load_state(db: AsyncSession, user_id: UUID, knowledge_id: UUID) -> tu
             )
         )
     ).scalar_one_or_none()
-    if state is None:
-        return 0.0, False
-    return state.mastery, state.is_weak
 
 
 async def _upsert_state(
