@@ -298,9 +298,7 @@ PROBLEMS = [
         "sample_input": "3 4\n1 4 7\n2 2 6 8\n",
         "sample_output": "1 2 2 4 6 7 8\n",
         "hints": ["分别维护两个数组的当前位置。"],
-        "test_cases": [
-            {"input": "3 4\n1 4 7\n2 2 6 8\n", "output": "1 2 2 4 6 7 8\n"}
-        ],
+        "test_cases": [{"input": "3 4\n1 4 7\n2 2 6 8\n", "output": "1 2 2 4 6 7 8\n"}],
     },
     {
         "slug": "demo-interval-scheduling",
@@ -355,9 +353,7 @@ PROBLEMS = [
         "sample_input": "4 5 1 4\n1 2 2\n1 3 5\n2 3 1\n2 4 6\n3 4 1\n",
         "sample_output": "4\n",
         "hints": ["使用优先队列优化 Dijkstra。"],
-        "test_cases": [
-            {"input": "4 5 1 4\n1 2 2\n1 3 5\n2 3 1\n2 4 6\n3 4 1\n", "output": "4\n"}
-        ],
+        "test_cases": [{"input": "4 5 1 4\n1 2 2\n1 3 5\n2 3 1\n2 4 6\n3 4 1\n", "output": "4\n"}],
     },
 ]
 
@@ -366,6 +362,29 @@ DEFAULT_DIAGNOSTIC_RATING = {
     ProblemDifficulty.MEDIUM: 1400.0,
     ProblemDifficulty.HARD: 1800.0,
 }
+
+# 自建题标签（CF 风格 tag，用于题库筛选与推送匹配）。
+# 由标题/知识点语义人工标注，保持与 CF 同步题一致的标签口径。
+SLUG_TAGS: dict[str, list[str]] = {
+    "demo-two-sum": ["hash table", "array"],
+    "demo-valid-parentheses": ["data structures", "stack"],
+    "demo-binary-search": ["binary search", "array"],
+    "demo-longest-substring": ["two pointers", "sliding window", "hash table"],
+    "demo-coin-change": ["dynamic programming"],
+    "demo-number-of-islands": ["dfs and similar", "bfs", "graph"],
+    "demo-edit-distance": ["dynamic programming", "strings"],
+    "demo-trapping-rain-water": ["two pointers", "dynamic programming", "stack"],
+    "demo-sort-numbers": ["sorting"],
+    "demo-merge-sorted-arrays": ["two pointers", "sorting"],
+    "demo-interval-scheduling": ["greedy", "sorting"],
+    "demo-grid-shortest-path": ["bfs", "shortest paths"],
+    "demo-topological-order": ["graph", "topological sort"],
+    "demo-longest-increasing-subsequence": ["dynamic programming", "binary search"],
+    "demo-dijkstra": ["shortest paths", "graph"],
+}
+
+for _p in PROBLEMS:
+    _p.setdefault("cf_tags", SLUG_TAGS.get(_p["slug"], []))
 
 
 async def seed() -> None:
@@ -449,9 +468,7 @@ async def seed() -> None:
             problem.title = item["title"]
             problem.description = item["description"].strip()
             problem.difficulty = item["difficulty"]
-            problem.cf_rating = item.get(
-                "cf_rating", DEFAULT_DIAGNOSTIC_RATING[item["difficulty"]]
-            )
+            problem.cf_rating = item.get("cf_rating", DEFAULT_DIAGNOSTIC_RATING[item["difficulty"]])
             problem.status = ProblemStatus.PUBLISHED
             problem.time_limit_ms = 2000
             problem.memory_limit_kb = 262144
@@ -464,6 +481,7 @@ async def seed() -> None:
                 "java": "public class Main {\n    public static void main(String[] args) {\n    }\n}\n",
             }
             problem.test_cases = item["test_cases"]
+            problem.cf_tags = item.get("cf_tags", [])
             problem.knowledge_points = [knowledge_by_slug[item["knowledge_slug"]]]
 
         await session.flush()

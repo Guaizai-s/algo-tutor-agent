@@ -103,8 +103,15 @@ async def list_problems(
     page_size: int = Query(20, ge=1, le=100),
     difficulty: ProblemDifficulty | None = None,
     search: str | None = Query(None, max_length=200),
+    tag: str | None = Query(None, max_length=100),
+    source: str | None = Query(None, max_length=50),
+    sort: str | None = Query(None, pattern="^(newest|oldest|rating_asc|rating_desc|acceptance)$"),
     db: AsyncSession = Depends(get_db),
 ) -> ProblemListResponse:
+    """题目列表：难度/关键词/标签/来源筛选 + 排序。
+
+    tag 为 CF 风格标签（cf_tags JSONB 包含匹配），如 "dynamic programming"。
+    """
     stmt = (
         select(Problem).where(Problem.status == ProblemStatus.PUBLISHED).options(selectinload(Problem.knowledge_points))
     )
@@ -114,13 +121,25 @@ async def list_problems(
     if search:
         like = f"%{search}%"
         stmt = stmt.where(or_(Problem.title.ilike(like), Problem.description.ilike(like)))
+    if tag:
+        stmt = stmt.where(Problem.cf_tags.contains([tag]))
+    if source:
+        stmt = stmt.where(Problem.source == source)
 
     # Total count for pagination.
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
+    order_by = {
+        "newest": Problem.created_at.desc(),
+        "oldest": Problem.created_at.asc(),
+        "rating_asc": Problem.cf_rating.asc().nulls_last(),
+        "rating_desc": Problem.cf_rating.desc().nulls_last(),
+        "acceptance": (Problem.accepted_count / func.nullif(Problem.submit_count, 0)).desc().nulls_last(),
+    }.get(sort, Problem.created_at.desc())
+
     offset = (page - 1) * page_size
-    stmt = stmt.order_by(Problem.created_at.desc()).offset(offset).limit(page_size)
+    stmt = stmt.order_by(order_by).offset(offset).limit(page_size)
     problems = (await db.execute(stmt)).scalars().all()
 
     total_pages = (total + page_size - 1) // page_size if total else 0
@@ -140,6 +159,8 @@ async def list_problems_by_knowledge(
     slug: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    tag: str | None = Query(None, max_length=100),
+    sort: str | None = Query(None, pattern="^(newest|oldest|rating_asc|rating_desc|acceptance)$"),
     db: AsyncSession = Depends(get_db),
 ) -> ProblemListResponse:
     stmt = (
@@ -149,11 +170,21 @@ async def list_problems_by_knowledge(
         .where(KnowledgePoint.slug == slug)
         .options(selectinload(Problem.knowledge_points))
     )
+    if tag:
+        stmt = stmt.where(Problem.cf_tags.contains([tag]))
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
+    order_by = {
+        "newest": Problem.created_at.desc(),
+        "oldest": Problem.created_at.asc(),
+        "rating_asc": Problem.cf_rating.asc().nulls_last(),
+        "rating_desc": Problem.cf_rating.desc().nulls_last(),
+        "acceptance": (Problem.accepted_count / func.nullif(Problem.submit_count, 0)).desc().nulls_last(),
+    }.get(sort, Problem.created_at.desc())
+
     offset = (page - 1) * page_size
-    stmt = stmt.order_by(Problem.created_at.desc()).offset(offset).limit(page_size)
+    stmt = stmt.order_by(order_by).offset(offset).limit(page_size)
     problems = (await db.execute(stmt)).scalars().all()
 
     total_pages = (total + page_size - 1) // page_size if total else 0

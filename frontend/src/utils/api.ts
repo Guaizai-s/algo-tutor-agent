@@ -71,6 +71,9 @@ export const problemsApi = {
     page_size?: number
     difficulty?: 'easy' | 'medium' | 'hard'
     search?: string
+    tag?: string
+    source?: string
+    sort?: 'newest' | 'oldest' | 'rating_asc' | 'rating_desc' | 'acceptance'
   }) => api.get('/problems/', { params }),
   getById: (id: string) => api.get(`/problems/${id}`),
   execute: (id: string, code: string, language: 'python' | 'cpp' | 'java') =>
