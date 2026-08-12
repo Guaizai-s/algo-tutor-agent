@@ -18,10 +18,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import KnowledgePoint
-from app.models.learning import WEAK_MASTERY_THRESHOLD, UserKnowledgeState, UserProblemAC
+from app.models.learning import WEAK_MASTERY_THRESHOLD, UserKnowledgeState
 from app.models.notification import Notification, NotificationType
-from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
 from app.schemas.notification import RecommendationItem, RecommendationProblem, RecommendationResponse
+from app.services.recommendation import recommend_problems_by_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -273,51 +273,37 @@ async def get_recommendations(
     if not weak_states:
         return RecommendationResponse(user_id=user_id, items=[])
 
-    # 2. 收集用户所有已 AC 的题目 ID
-    ac_problem_ids = set(
-        (await db.execute(select(UserProblemAC.problem_id).where(UserProblemAC.user_id == user_id))).scalars().all()
-    )
-
     items: list[RecommendationItem] = []
     for kid, mastery, kname in weak_states:
-        # 3. 找该知识点关联的已发布题目中用户未 AC 的，按 cf_rating 升序
-        stmt = (
-            select(Problem)
-            .join(ProblemKnowledgePoint, ProblemKnowledgePoint.problem_id == Problem.id)
-            .where(
-                ProblemKnowledgePoint.knowledge_id == kid,
-                Problem.status == ProblemStatus.PUBLISHED,
-            )
-            .order_by(Problem.cf_rating.asc().nulls_last(), Problem.difficulty.asc())
-            .limit(max_per_knowledge * 2)
+        # 复用 recommendation.recommend_problems_by_knowledge()，避免重复查询逻辑
+        candidates = await recommend_problems_by_knowledge(
+            db,
+            user_id,
+            kid,
+            limit=max_per_knowledge,
         )
-        candidates = (await db.execute(stmt)).scalars().all()
+        if not candidates:
+            continue
 
-        problems: list[RecommendationProblem] = []
-        for p in candidates:
-            if p.id in ac_problem_ids:
-                continue
-            problems.append(
-                RecommendationProblem(
-                    problem_id=p.id,
-                    title=p.title,
-                    slug=p.slug,
-                    difficulty=p.difficulty.value,
-                    cf_rating=p.cf_rating,
-                )
+        problems: list[RecommendationProblem] = [
+            RecommendationProblem(
+                problem_id=p.id,
+                title=p.title,
+                slug=p.slug,
+                difficulty=p.difficulty.value,
+                cf_rating=p.cf_rating,
             )
-            if len(problems) >= max_per_knowledge:
-                break
+            for p in candidates
+        ]
 
-        if problems:
-            items.append(
-                RecommendationItem(
-                    knowledge_id=kid,
-                    knowledge_name=kname,
-                    mastery=int(mastery * 100),
-                    problems=problems,
-                )
+        items.append(
+            RecommendationItem(
+                knowledge_id=kid,
+                knowledge_name=kname,
+                mastery=int(mastery * 100),
+                problems=problems,
             )
+        )
 
     return RecommendationResponse(user_id=user_id, items=items)
 
@@ -440,3 +426,36 @@ async def send_batch_recommendation_push(
         "notified_users": notified,
         "notifications_sent": total_sent,
     }
+
+
+async def mark_review_reminders_read(
+    db: AsyncSession,
+    user_id: UUID,
+    knowledge_id: UUID,
+) -> int:
+    """用户完成某知识点的复习后，自动标记相关 review_reminder 通知为已读。
+
+    避免用户已在 Review 页面完成复习但消息中心仍有未读提醒。
+
+    Returns:
+        被标记为已读的通知数量
+    """
+    now = datetime.now(UTC)
+    result = await db.execute(
+        update(Notification)
+        .where(
+            Notification.user_id == user_id,
+            Notification.related_knowledge_id == knowledge_id,
+            Notification.notification_type == NotificationType.REVIEW_REMINDER,
+            Notification.is_read == False,  # noqa: E712
+        )
+        .values(is_read=True, read_at=now)
+    )
+    await db.flush()
+    logger.info(
+        "mark_review_reminders_read: user=%s, knowledge=%s, marked=%d",
+        user_id,
+        knowledge_id,
+        result.rowcount,
+    )
+    return result.rowcount

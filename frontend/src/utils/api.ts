@@ -103,7 +103,7 @@ export const notificationApi = {
   list: () => api.get('/notifications'),
   markAsRead: (id: string) => api.post(`/notifications/${id}/read`),
   markAllAsRead: () => api.post('/notifications/read-all'),
-  getRecommendations: () => api.get('/notifications/recommendations'),
+  getRecommendations: () => api.get('/recommendations'),
 }
 
 export const submissionsApi = {

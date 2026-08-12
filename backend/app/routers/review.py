@@ -19,11 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser
+from app.services.recommendation import recommend_problems_by_knowledge
 from app.services.review import (
     complete_review,
     create_review_record,
     get_due_reviews,
-    get_review_problem,
     get_review_status,
 )
 
@@ -117,6 +117,14 @@ async def api_get_review_problem(
     knowledge_id: UUID = Query(..., description="知识点 ID"),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取复习推荐题目（排除已 AC 题）。"""
-    problem_id = await get_review_problem(db, knowledge_id, current_user.id)
-    return {"problem_id": str(problem_id) if problem_id else None}
+    """获取复习推荐题目（排除已 AC 题）。
+
+    复用 recommendation.recommend_problems_by_knowledge()，避免重复查询逻辑。
+    """
+    problems = await recommend_problems_by_knowledge(
+        db,
+        current_user.id,
+        knowledge_id,
+        limit=1,
+    )
+    return {"problem_id": str(problems[0].id) if problems else None}

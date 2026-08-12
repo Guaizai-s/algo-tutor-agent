@@ -19,6 +19,7 @@ from app.routers import (
     notifications,
     problems,
     progress,
+    recommendations,
     review,
     solutions,
     submissions,
@@ -73,6 +74,7 @@ app.include_router(coldstart.router, prefix=settings.API_V1_STR)
 app.include_router(review.router, prefix=settings.API_V1_STR)
 app.include_router(judge.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
+app.include_router(recommendations.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

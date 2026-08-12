@@ -22,7 +22,6 @@ from app.models.learning import (
     ReviewRecord,
     ReviewStage,
 )
-from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +108,12 @@ async def complete_review(
         record.next_review_at = datetime.now(UTC) + timedelta(days=interval)
 
     await db.flush()
+
+    # 自动标记相关通知已读，避免消息中心残留未读提醒
+    from app.services.push import mark_review_reminders_read
+
+    await mark_review_reminders_read(db, user_id, knowledge_id)
+
     return record
 
 
@@ -215,50 +220,3 @@ async def get_review_status(
         "due_count": len(due),
         "due_items": due_items,
     }
-
-
-async def get_review_problem(
-    db: AsyncSession,
-    knowledge_id: UUID,
-    user_id: UUID,
-) -> UUID | None:
-    """为复习知识点推荐一道变体题。
-
-    选题规则：
-    - 关联该知识点的已发布题目
-    - 排除用户已 AC 的题目
-    - 优先选 easy 难度
-
-    Returns:
-        题目 ID，无合适题目时返回 None
-    """
-    from app.models.learning import UserProblemAC
-
-    # 获取用户已 AC 的题目
-    ac_problems = (
-        (await db.execute(select(UserProblemAC.problem_id).where(UserProblemAC.user_id == user_id))).scalars().all()
-    )
-    ac_set = set(ac_problems)
-
-    # 查询关联题目，按难度升序
-    rows = (
-        (
-            await db.execute(
-                select(Problem.id)
-                .join(ProblemKnowledgePoint, ProblemKnowledgePoint.problem_id == Problem.id)
-                .where(
-                    ProblemKnowledgePoint.knowledge_id == knowledge_id,
-                    Problem.status == ProblemStatus.PUBLISHED,
-                )
-                .order_by(Problem.difficulty.asc())
-                .limit(10)
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    for pid in rows:
-        if pid not in ac_set:
-            return pid
-    return None
