@@ -390,7 +390,7 @@ const ProgressPage: React.FC = () => {
           )}
           <button
             type="button"
-            onClick={() => navigate('/roadmap')}
+            onClick={() => navigate('/knowledge')}
             className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
           >
             查看路线图 <ArrowRight size={12} />

@@ -12,11 +12,13 @@ import {
   AlertCircle,
   ExternalLink,
   Link2,
+  Trophy,
+  History,
 } from 'lucide-react'
 import Editor from '@monaco-editor/react'
-import { problemsApi } from '../utils/api'
+import { problemsApi, submissionsApi, DEV_USER_ID } from '../utils/api'
 import { useAuthStore } from '../stores/authStore'
-import type { CodeExecutionResult, Problem } from '../types'
+import type { CodeExecutionResult, Problem, SubmissionRead, SubmissionListResponse } from '../types'
 
 type Lang = 'python' | 'cpp' | 'java'
 
@@ -42,6 +44,8 @@ const ProblemDetail: React.FC = () => {
   const [result, setResult] = useState<CodeExecutionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hintLevel, setHintLevel] = useState(0)
+  const [submissions, setSubmissions] = useState<SubmissionRead[]>([])
+  const [isAC, setIsAC] = useState(false)
   const { user } = useAuthStore()
   const cfBound = !!user?.cf_handle
 
@@ -65,6 +69,19 @@ const ProblemDetail: React.FC = () => {
       })
       .finally(() => setProblemLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  // Load submissions for this problem.
+  useEffect(() => {
+    if (!id) return
+    submissionsApi
+      .list({ user_id: DEV_USER_ID, problem_id: id, page_size: 5 })
+      .then((resp) => {
+        const data = resp.data as SubmissionListResponse
+        setSubmissions(data.items)
+        setIsAC(data.items.some((s) => s.verdict === 'OK'))
+      })
+      .catch(() => {})
   }, [id])
 
   if (problemLoading) {
@@ -104,6 +121,15 @@ const ProblemDetail: React.FC = () => {
       // 代码执行是确定性后端操作，不经过耗时且可能重复调用工具的 Agent。
       const resp = await problemsApi.execute(id, code, language)
       setResult(resp.data)
+      // 刷新提交记录（CF 同步可能已写入新提交）
+      submissionsApi
+        .list({ user_id: DEV_USER_ID, problem_id: id, page_size: 5 })
+        .then((sResp) => {
+          const data = sResp.data as SubmissionListResponse
+          setSubmissions(data.items)
+          setIsAC(data.items.some((s) => s.verdict === 'OK'))
+        })
+        .catch(() => {})
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '提交失败，请重试'
       setError(msg)
@@ -155,6 +181,12 @@ const ProblemDetail: React.FC = () => {
           <ArrowLeft size={20} />
         </Link>
         <h1 className="text-xl font-bold text-gray-900">{problem.title}</h1>
+        {isAC && (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+            <Trophy size={12} />
+            AC
+          </span>
+        )}
         <span
           className={`px-2 py-1 text-xs rounded ${
             DIFFICULTY_STYLE[problem.difficulty] || 'bg-gray-100 text-gray-700'
@@ -352,6 +384,41 @@ const ProblemDetail: React.FC = () => {
                     </pre>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {submissions.length > 0 && (
+            <div className="border-t border-gray-700 bg-gray-800 p-4 max-h-48 overflow-y-auto">
+              <div className="flex items-center gap-2 mb-2">
+                <History size={14} className="text-gray-400" />
+                <span className="text-xs text-gray-400 font-medium">提交记录</span>
+              </div>
+              <div className="space-y-1.5">
+                {submissions.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    {sub.verdict === 'OK' ? (
+                      <CheckCircle size={12} className="text-green-400 flex-shrink-0" />
+                    ) : (
+                      <XCircle size={12} className="text-red-400 flex-shrink-0" />
+                    )}
+                    <span className={sub.verdict === 'OK' ? 'text-green-400' : 'text-red-400'}>
+                      {sub.verdict === 'OK' ? 'AC' : sub.verdict}
+                    </span>
+                    <span className="text-gray-500">{sub.programming_language}</span>
+                    <span className="text-gray-500 ml-auto">
+                      {new Date(sub.submitted_at).toLocaleString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

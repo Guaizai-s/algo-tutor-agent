@@ -116,6 +116,11 @@ export const notificationApi = {
   getRecommendations: () => api.get('/notifications/recommendations'),
 }
 
+export const submissionsApi = {
+  list: (params: { user_id: string; problem_id?: string; verdict?: string; page?: number; page_size?: number }) =>
+    api.get('/submissions', { params }),
+}
+
 export const discussionApi = {
   getSolutions: (problemId: string) => api.get(`/problems/${problemId}/solutions`),
   /** 全局题解列表（讨论区首页）。 */
