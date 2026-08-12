@@ -125,28 +125,6 @@ export interface ReviewItem {
   problem?: Problem
 }
 
-export interface Solution {
-  id: string
-  problem_id: string
-  user: User
-  title: string
-  content: string
-  language: string
-  likes: number
-  is_featured: boolean
-  comments_count: number
-  created_at: string
-}
-
-export interface Comment {
-  id: string
-  solution_id: string
-  user: User
-  content: string
-  likes: number
-  created_at: string
-}
-
 export interface MasteryByCategory {
   /** 知识点 ID，用于映射 weak_knowledge_ids */
   knowledge_id: string

@@ -13,8 +13,6 @@ import Progress from './pages/Progress'
 import WrongAnswers from './pages/WrongAnswers'
 import Review from './pages/Review'
 import Notifications from './pages/Notifications'
-import Discussions from './pages/Discussions'
-import SolutionDetail from './pages/SolutionDetail'
 import TodayTask from './pages/TodayTask'
 import Profile from './pages/Profile'
 
@@ -46,8 +44,6 @@ function App() {
           <Route path="wrong-answers" element={<WrongAnswers />} />
           <Route path="review" element={<Review />} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="discussions" element={<Discussions />} />
-          <Route path="solutions/:id" element={<SolutionDetail />} />
         </Route>
       </Routes>
     </Router>

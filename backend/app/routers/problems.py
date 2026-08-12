@@ -187,35 +187,3 @@ async def execute_problem_code(
             "message": message,
         }
     )
-
-
-@router.get("/{problem_id}/solutions")
-async def api_get_problem_solutions(
-    problem_id: UUID,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取题目关联的题解列表（前端兼容路径，转发到 solutions 服务）。"""
-    from app.models.problem import Solution
-    from app.routers.solutions import _solution_to_read
-
-    count_stmt = select(func.count(Solution.id)).where(Solution.problem_id == problem_id)
-    total = (await db.execute(count_stmt)).scalar_one()
-
-    stmt = (
-        select(Solution)
-        .where(Solution.problem_id == problem_id)
-        .order_by(Solution.is_featured.desc(), Solution.like_count.desc(), Solution.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-
-    return {
-        "items": [_solution_to_read(r).model_dump() for r in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, (total + page_size - 1) // page_size),
-    }

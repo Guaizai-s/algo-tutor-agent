@@ -8,7 +8,6 @@ import {
   BookX,
   Bell,
   RefreshCw,
-  Users,
   LogOut,
   Menu,
   X,
@@ -32,7 +31,6 @@ const Layout: React.FC = () => {
     { path: '/wrong-answers', label: '错题本', icon: BookX },
     { path: '/review', label: '复习提醒', icon: RefreshCw },
     { path: '/notifications', label: '消息中心', icon: Bell },
-    { path: '/discussions', label: '题解广场', icon: Users },
   ]
 
   const handleLogout = () => {

@@ -116,16 +116,6 @@ export const submissionsApi = {
   }) => api.get('/submissions', { params }),
 }
 
-export const discussionApi = {
-  /** 全局题解列表（讨论区首页）。 */
-  getGlobalSolutions: () => api.get('/solutions'),
-  getSolutionById: (id: string) => api.get(`/solutions/${id}`),
-  likeSolution: (id: string) => api.post(`/solutions/${id}/like`),
-  getComments: (solutionId: string) => api.get(`/solutions/${solutionId}/comments`),
-  createComment: (solutionId: string, content: string) =>
-    api.post(`/solutions/${solutionId}/comments`, { content }),
-}
-
 // ===== Task 10: Learning path & daily task =====
 
 export const learningApi = {

@@ -21,7 +21,6 @@ from app.routers import (
     progress,
     recommendations,
     review,
-    solutions,
     submissions,
     wrongbook,
 )
@@ -67,7 +66,6 @@ app.include_router(learning.daily_router, prefix=settings.API_V1_STR)
 app.include_router(progress.router, prefix=settings.API_V1_STR)
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(discussions.router, prefix=settings.API_V1_STR)
-app.include_router(solutions.router, prefix=settings.API_V1_STR)
 app.include_router(wrongbook.router, prefix=settings.API_V1_STR)
 app.include_router(submissions.router, prefix=settings.API_V1_STR)
 app.include_router(coldstart.router, prefix=settings.API_V1_STR)

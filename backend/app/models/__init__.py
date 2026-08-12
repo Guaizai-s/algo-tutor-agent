@@ -35,8 +35,6 @@ from app.models.problem import (
     ProblemKnowledgePoint,
     ProblemStatus,
     ProblemVariant,
-    Solution,
-    SolutionComment,
 )
 from app.models.user import TargetMedal, User, UserRole
 from app.models.wrongbook import WrongBookEntry
@@ -55,8 +53,6 @@ __all__ = [
     "ProblemStatus",
     "ProblemKnowledgePoint",
     "ProblemVariant",
-    "Solution",
-    "SolutionComment",
     # Task 10 学习路径与推送引擎
     "UserKnowledgeState",
     "UserProblemAC",
