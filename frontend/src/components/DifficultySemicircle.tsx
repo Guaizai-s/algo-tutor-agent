@@ -2,7 +2,7 @@ import React from 'react'
 
 /**
  * 双维度难度圆图
- * 上半 = 理解难度，下半 = 理论深度
+ * 对角线斜切为两半：左上 = 理解难度，右下 = 理论深度
  * 配色参考洛谷版：1=灰 2=绿 3=蓝 4=紫/橙 5=红/黑
  */
 
@@ -13,10 +13,10 @@ interface Props {
   showLabels?: boolean
 }
 
-/** 理解难度（上半）暖色 */
+/** 理解难度（左上）暖色 */
 const COMP = ['#bfbfbf', '#52c41a', '#3498db', '#f39c11', '#fe4c61']
 
-/** 理论深度（下半）冷色 */
+/** 理论深度（右下）冷色 */
 const THEORY = ['#bfbfbf', '#52c41a', '#3498db', '#9d3dcf', '#0e1d69']
 
 /** 1-5 → 中文 */
@@ -32,25 +32,24 @@ const DifficultySemicircle: React.FC<Props> = ({
   const ci = clamp(comprehension) - 1
   const ti = clamp(theory) - 1
 
-  const r = size / 2
-  const style: React.CSSProperties = {
-    width: size,
-    height: size,
-    borderRadius: '50%',
-    background: `conic-gradient(${COMP[ci]} 0deg 180deg, ${THEORY[ti]} 180deg 360deg)`,
-    flexShrink: 0,
-  }
+  // from 135deg: 分割线从左上到右下
+  const grad = `conic-gradient(from 135deg, ${COMP[ci]} 0deg 180deg, ${THEORY[ti]} 180deg 360deg)`
 
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div
-        style={style}
-        className="flex items-center justify-center"
+        className="flex items-center justify-center flex-shrink-0"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          background: grad,
+        }}
       >
-        {showLabels && (
+        {showLabels && size >= 60 && (
           <div
-            className="flex flex-col items-center leading-tight bg-white/80 rounded-full"
-            style={{ width: r * 0.8, height: r * 0.8, justifyContent: 'center' }}
+            className="flex flex-col items-center leading-tight bg-white/85 rounded-full"
+            style={{ width: size * 0.45, height: size * 0.45, justifyContent: 'center' }}
           >
             <span className="text-lg font-bold text-gray-800">{comprehension}</span>
             <span className="text-[10px] text-gray-400">理解</span>

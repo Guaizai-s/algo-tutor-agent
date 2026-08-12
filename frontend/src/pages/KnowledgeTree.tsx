@@ -384,7 +384,7 @@ const KnowledgeTree: React.FC = () => {
             <DifficultySemicircle
               comprehension={node.comprehension_difficulty ?? 1}
               theory={node.theory_depth ?? 1}
-              size={36}
+              size={22}
               showLabels={false}
             />
           )}
