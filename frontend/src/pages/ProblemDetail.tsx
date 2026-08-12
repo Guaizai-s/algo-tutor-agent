@@ -16,7 +16,7 @@ import {
   History,
 } from 'lucide-react'
 import Editor from '@monaco-editor/react'
-import { problemsApi, submissionsApi, DEV_USER_ID } from '../utils/api'
+import { problemsApi, submissionsApi } from '../utils/api'
 import { useAuthStore } from '../stores/authStore'
 import type { CodeExecutionResult, Problem, SubmissionRead, SubmissionListResponse } from '../types'
 
@@ -75,14 +75,14 @@ const ProblemDetail: React.FC = () => {
   useEffect(() => {
     if (!id) return
     submissionsApi
-      .list({ user_id: DEV_USER_ID, problem_id: id, page_size: 5 })
+      .list({ user_id: user?.id ?? '', problem_id: id, page_size: 5 })
       .then((resp) => {
         const data = resp.data as SubmissionListResponse
         setSubmissions(data.items)
         setIsAC(data.items.some((s) => s.verdict === 'OK'))
       })
       .catch(() => {})
-  }, [id])
+  }, [id, user?.id])
 
   if (problemLoading) {
     return (
@@ -123,7 +123,7 @@ const ProblemDetail: React.FC = () => {
       setResult(resp.data)
       // 刷新提交记录（CF 同步可能已写入新提交）
       submissionsApi
-        .list({ user_id: DEV_USER_ID, problem_id: id, page_size: 5 })
+        .list({ user_id: user?.id ?? '', problem_id: id, page_size: 5 })
         .then((sResp) => {
           const data = sResp.data as SubmissionListResponse
           setSubmissions(data.items)
