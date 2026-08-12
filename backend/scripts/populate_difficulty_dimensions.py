@@ -25,7 +25,6 @@ from sqlalchemy import text, update
 from app.core.database import async_session_maker
 
 # 按一级分类 slug（不含 cat- 前缀的根节点）的默认值
-# key = 根节点 slug 中的分类名，value = (comprehension_difficulty, theory_depth)
 CATEGORY_DEFAULTS: dict[str, tuple[int, int]] = {
     "入门": (1, 1),
     "基础": (2, 1),
@@ -38,6 +37,25 @@ CATEGORY_DEFAULTS: dict[str, tuple[int, int]] = {
     "杂项": (2, 2),
     "竞赛": (4, 4),
 }
+
+# 基于 slug 关键词的精细调整：匹配到则 comprehension +dx, theory +dy
+# 通过关键词识别难度特征，拉大区分度
+SLUG_ADJUSTMENTS: list[tuple[list[str], int, int]] = [
+    # —— 入门级 降低 ——
+    (["intro", "basic", "concept", "save", "node", "overview"], 0, -1),
+    # —— 进阶级 调高 ——
+    (["divide", "persistent", "virtual", "centroid", "cdq"], 1, 2),
+    (["opt", "slope", "quadrangle", "plug"], 1, 1),
+    (["flow", "cut", "matching", "max", "min-cost", "min-cut"], 1, 2),
+    (["tree", "hld", "lct", "splay", "treap", "scc", "bst"], 1, 1),
+    (["fft", "ntt", "fwt", "poly", "berlekamp", "simplex"], 2, 2),
+    (["game", "linear-program", "matroid"], 1, 1),
+    (["number-theory-prime", "pollard", "meissel", "min-25", "discrete-log"], 2, 2),
+    (["crt", "pell", "quad-residue", "primitive-root", "zhou"], 2, 2),
+    (["automaton", "suffix", "sam", "pam", "lyndon"], 1, 2),
+    (["geometry-3d", "half-plane", "triangulation", "convex-hull"], 1, 2),
+    (["phantom", "preact"], 0, -1),
+]
 
 # 特定知识点的精细覆盖（slug → (comprehension, theory)）
 # 基于知识点语义手动调整
@@ -149,112 +167,118 @@ SPECIFIC_OVERRIDES: dict[str, tuple[int, int]] = {
 }
 
 
+def _apply_slug_adjustment(slug: str, base_comp: int, base_theory: int) -> tuple[int, int]:
+    """基于 slug 关键词调整 difficulty + theory，拉大区分度"""
+    comp_delta, theory_delta = 0, 0
+    slug_lower = slug.lower()
+    for keywords, dc, dt in SLUG_ADJUSTMENTS:
+        for kw in keywords:
+            if kw in slug_lower:
+                comp_delta += dc
+                theory_delta += dt
+                break  # 每组匹配一次
+    # clamp 不允许到 0 以下或超过 5
+    comp = min(max(base_comp + comp_delta, 1), 5)
+    theory = min(max(base_theory + theory_delta, 1), 5)
+    return comp, theory
+
+
 async def main() -> None:
     from app.models.knowledge import KnowledgePoint
 
     async with async_session_maker() as session:
-        # 1) 按分类批量设置默认值（穿透 subtag 父节点找到根分类）
-        #    对 comprehension=1 且 theory=1 的未初始化知识点，通过递归 parent 链
-        #    找到一级分类根节点，匹配 CATEGORY_DEFAULTS
-        await session.execute(
-            text("""
-                WITH RECURSIVE ancestors AS (
-                    -- 所有未初始化的叶子/子节点
-                    SELECT k.id, k.parent_id, 0 as depth
-                    FROM knowledge_points k
-                    WHERE k.comprehension_difficulty = 1
-                      AND k.theory_depth = 1
-                      AND k.parent_id IS NOT NULL
-                    UNION ALL
-                    SELECT a.id, p.parent_id, a.depth + 1
-                    FROM ancestors a
-                    JOIN knowledge_points p ON p.id = a.parent_id
-                    WHERE a.parent_id IS NOT NULL
-                      AND a.depth < 5
-                ),
-                root_match AS (
-                    SELECT DISTINCT ON (a.id) a.id as kp_id, root.slug as root_slug
-                    FROM ancestors a
-                    JOIN knowledge_points root ON root.id = a.parent_id
-                    WHERE root.parent_id IS NULL
-                      AND root.slug LIKE 'cat-%'
-                    ORDER BY a.id, a.depth DESC
-                )
-                UPDATE knowledge_points k
-                SET comprehension_difficulty = CASE
-                    WHEN rm.root_slug = 'cat-入门' THEN 1
-                    WHEN rm.root_slug = 'cat-基础' THEN 2
-                    WHEN rm.root_slug = 'cat-数据结构' THEN 3
-                    WHEN rm.root_slug = 'cat-图论' THEN 3
-                    WHEN rm.root_slug = 'cat-动态规划' THEN 3
-                    WHEN rm.root_slug = 'cat-字符串' THEN 2
-                    WHEN rm.root_slug = 'cat-搜索' THEN 2
-                    WHEN rm.root_slug = 'cat-数学' THEN 3
-                    WHEN rm.root_slug = 'cat-杂项' THEN 2
-                    WHEN rm.root_slug = 'cat-竞赛' THEN 4
-                    ELSE 2
-                END,
-                    theory_depth = CASE
-                    WHEN rm.root_slug = 'cat-入门' THEN 1
-                    WHEN rm.root_slug = 'cat-基础' THEN 1
-                    WHEN rm.root_slug = 'cat-数据结构' THEN 2
-                    WHEN rm.root_slug = 'cat-图论' THEN 2
-                    WHEN rm.root_slug = 'cat-动态规划' THEN 3
-                    WHEN rm.root_slug = 'cat-字符串' THEN 2
-                    WHEN rm.root_slug = 'cat-搜索' THEN 2
-                    WHEN rm.root_slug = 'cat-数学' THEN 2
-                    WHEN rm.root_slug = 'cat-杂项' THEN 2
-                    WHEN rm.root_slug = 'cat-竞赛' THEN 4
-                    ELSE 2
-                END
-                FROM root_match rm
-                WHERE k.id = rm.kp_id
-            """)
-        )
-        # 根节点本身也更新
+        # 0) 临时清空所有值，以便重新计算
+        await session.execute(update(KnowledgePoint).values(comprehension_difficulty=0, theory_depth=0))
+
+        # 1) 按分类设置基准值（SQL 批量）
         for cat, (comp, theory) in CATEGORY_DEFAULTS.items():
             root_slug = f"cat-{cat}"
+            # 根节点
             await session.execute(
                 update(KnowledgePoint)
                 .where(KnowledgePoint.slug == root_slug)
                 .values(comprehension_difficulty=comp, theory_depth=theory)
             )
+            # 子树（至多 4 层递归查找分类归属）
+            await session.execute(
+                text("""
+                    WITH RECURSIVE subtree AS (
+                        SELECT k.id, k.parent_id, 0 as depth
+                        FROM knowledge_points k
+                        JOIN knowledge_points root ON root.id = k.parent_id
+                        WHERE root.slug = :root_slug
+                        UNION ALL
+                        SELECT k.id, k.parent_id, s.depth + 1
+                        FROM subtree s
+                        JOIN knowledge_points k ON k.parent_id = s.id
+                        WHERE s.depth < 4
+                    )
+                    UPDATE knowledge_points k
+                    SET comprehension_difficulty = :comp,
+                        theory_depth = :theory
+                    FROM subtree s
+                    WHERE k.id = s.id
+                """),
+                {"comp": comp, "theory": theory, "root_slug": root_slug},
+            )
+        # CF 标签
         await session.execute(
             update(KnowledgePoint)
             .where(KnowledgePoint.slug == "cat-CF标签")
             .values(comprehension_difficulty=2, theory_depth=2)
         )
-
-        # 1b) 一级分类直挂的子节点（非 subtag 子节点）用 CATEGORY_DEFAULTS
-        for cat, (comp, theory) in CATEGORY_DEFAULTS.items():
-            root_slug = f"cat-{cat}"
-            await session.execute(
-                text("""
-                    UPDATE knowledge_points kp
-                    SET comprehension_difficulty = :comp,
-                        theory_depth = :theory
-                    FROM knowledge_points parent
-                    WHERE kp.parent_id = parent.id
-                      AND parent.slug = :root_slug
-                      AND kp.comprehension_difficulty = 1
-                      AND kp.theory_depth = 1
-                """),
-                {"comp": comp, "theory": theory, "root_slug": root_slug},
-            )
         await session.execute(
             text("""
-                UPDATE knowledge_points kp
+                WITH RECURSIVE subtree AS (
+                    SELECT k.id, k.parent_id, 0 as depth
+                    FROM knowledge_points k
+                    JOIN knowledge_points root ON root.id = k.parent_id
+                    WHERE root.slug = 'cat-CF标签'
+                    UNION ALL
+                    SELECT k.id, k.parent_id, s.depth + 1
+                    FROM subtree s
+                    JOIN knowledge_points k ON k.parent_id = s.id
+                    WHERE s.depth < 4
+                )
+                UPDATE knowledge_points k
                 SET comprehension_difficulty = 2,
                     theory_depth = 2
-                FROM knowledge_points parent
-                WHERE kp.parent_id = parent.id
-                  AND parent.slug = 'cat-CF标签'
-                  AND kp.comprehension_difficulty = 1
-                  AND kp.theory_depth = 1
+                FROM subtree s
+                WHERE k.id = s.id
             """)
         )
 
-        # 2) 精细覆盖
+        # 2) 基于 slug 关键词精细调整（Python 逐条处理，补偿 SQL 批量缺乏的粒度）
+        rows = await session.execute(
+            text("""
+                SELECT id, slug, comprehension_difficulty, theory_depth
+                FROM knowledge_points
+                WHERE comprehension_difficulty > 0
+                ORDER BY id
+            """)
+        )
+        updates: list[dict] = []
+        for row in rows.mappings().all():
+            base_comp = row["comprehension_difficulty"]
+            base_theory = row["theory_depth"]
+            comp, theory = _apply_slug_adjustment(row["slug"], base_comp, base_theory)
+            if (comp, theory) != (base_comp, base_theory):
+                updates.append({"id": row["id"], "comp": comp, "theory": theory})
+
+        if updates:
+            # batch update
+            for item in updates:
+                await session.execute(
+                    text("""
+                        UPDATE knowledge_points
+                        SET comprehension_difficulty = :comp,
+                            theory_depth = :theory
+                        WHERE id = :id
+                    """),
+                    item,
+                )
+
+        # 3) 精细覆盖（必须以最终值写入为准）
         overridden = 0
         for slug, (comp, theory) in SPECIFIC_OVERRIDES.items():
             result = await session.execute(
@@ -269,27 +293,39 @@ async def main() -> None:
             if result.rowcount:
                 overridden += result.rowcount
 
-        await session.commit()
-
-        # 3) 验证
-        r = await session.execute(
+        # 4) 最终钳位 & 兜底（未被任何规则覆盖的设为 2,1）
+        await session.execute(
             text("""
-                SELECT
-                    CASE
-                        WHEN comprehension_difficulty = 1 AND theory_depth = 1 THEN 0
-                        ELSE 1
-                    END as initialized,
-                    COUNT(*)
-                FROM knowledge_points
-                GROUP BY 1
-                ORDER BY 1
+                UPDATE knowledge_points
+                SET comprehension_difficulty = 2,
+                    theory_depth = 1
+                WHERE comprehension_difficulty = 0
             """)
         )
-        stats = r.all()
-        for initialized, cnt in stats:
-            label = "已初始化" if initialized else "未初始化(默认值)"
-            print(f"{label}: {cnt} 个知识点")
+        await session.execute(
+            text("""
+                UPDATE knowledge_points
+                SET comprehension_difficulty = GREATEST(1, LEAST(5, comprehension_difficulty)),
+                    theory_depth = GREATEST(1, LEAST(5, theory_depth))
+            """)
+        )
 
+        await session.commit()
+
+        # 5) 验证分布
+        r = await session.execute(
+            text("""
+                SELECT comprehension_difficulty, theory_depth, COUNT(*)
+                FROM knowledge_points
+                GROUP BY 1, 2
+                ORDER BY 1, 2
+            """)
+        )
+        print("两维分布：(comp, theory) → count")
+        for comp, theory, cnt in r.all():
+            color_comp = ["", "红", "橙", "黄", "绿", "青"][comp]
+            color_theory = ["", "红", "橙", "黄", "绿", "青"][theory]
+            print(f"  ({comp},{theory}) → {color_comp}/{color_theory} × {cnt}")
         print(f"精细覆盖: {overridden} 行")
 
 
