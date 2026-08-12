@@ -13,8 +13,12 @@
 
 from __future__ import annotations
 
+import io
 import logging
+import shlex
+import tarfile
 import tempfile
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -108,27 +112,11 @@ async def judge(
         source_path = workdir / config["source_file"]
         source_path.write_text(source_code, encoding="utf-8")
 
-        # 编译（如果需要）
-        if config["compile_cmd"] is not None:
-            compile_result = await _run_in_docker(
-                workdir=str(workdir),
-                cmd=config["compile_cmd"],
-                timeout_ms=config["compile_timeout_ms"],
-                memory_mb=512,
-                stdin_data="",
-            )
-            if compile_result.verdict != Verdict.AC:
-                return JudgeResult(
-                    verdict=Verdict.CE,
-                    stderr=compile_result.stderr,
-                    message=f"编译错误: {compile_result.stderr[:200]}",
-                )
-
-        # 执行
+        # 编译 + 运行在同一个容器内完成（编译产物需在同一容器中持久可见）
         stdin_data = test_input or ""
-        run_result = await _run_in_docker(
+        run_result = await _judge_in_container(
             workdir=str(workdir),
-            cmd=config["run_cmd"],
+            config=config,
             timeout_ms=timeout_ms,
             memory_mb=memory_mb,
             stdin_data=stdin_data,
@@ -157,17 +145,73 @@ async def judge(
             )
 
 
-async def _run_in_docker(
+def _build_tar(workdir: Path, extra_files: dict[str, str] | None = None) -> bytes:
+    """把工作目录文件打成 tar 流，供 put_archive 注入沙箱容器。
+
+    文件所有权固定为沙箱用户 (uid=1000)，保证容器内非 root 用户可读写。
+    """
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        for f in workdir.iterdir():
+            if not f.is_file():
+                continue
+            info = tar.gettarinfo(str(f), arcname=f.name)
+            info.uid = 1000
+            info.gid = 1000
+            info.mtime = int(time.time())
+            with f.open("rb") as fh:
+                tar.addfile(info, fh)
+        for name, content in (extra_files or {}).items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            info.mtime = int(time.time())
+            info.uid = 1000
+            info.gid = 1000
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def _create_judge_container(client, memory_mb: int):
+    """创建常驻判题容器（匿名卷挂载 /sandbox，根文件系统只读）。
+
+    docker-py 的 Container.run(volumes=...) 仅支持 bind mount，
+    而容器内临时路径无法被宿主机 daemon 解析，故用低层 API 建匿名卷。
+    """
+    host_config = client.api.create_host_config(
+        network_mode="none" if settings.SANDBOX_NETWORK_DISABLED else "default",
+        mem_limit=f"{memory_mb}m",
+        memswap_limit=f"{memory_mb}m",
+        cpu_period=100000,
+        cpu_quota=int(settings.SANDBOX_CPU_LIMIT * 100000),
+        pids_limit=settings.SANDBOX_PIDS_LIMIT,
+        read_only=True,
+    )
+    resp = client.api.create_container(
+        image=settings.SANDBOX_IMAGE,
+        command=["sh", "-c", "tail -f /dev/null"],
+        working_dir="/sandbox",
+        user=settings.SANDBOX_USER,
+        volumes=["/sandbox"],  # 匿名卷：readonly 根文件系统下 /sandbox 仍可写
+        host_config=host_config,
+    )
+    container = client.containers.get(resp["Id"])
+    container.start()
+    return container
+
+
+async def _judge_in_container(
     workdir: str,
-    cmd: list[str],
+    config: dict,
     timeout_ms: int,
     memory_mb: int,
     stdin_data: str,
 ) -> JudgeResult:
-    """在 Docker 容器中执行命令。
+    """在单个沙箱容器中完成「注入源码 → 编译(如需) → 运行」，返回执行 verdict。
 
-    Returns:
-        JudgeResult with AC if execution successful, TLE/RE/ERR otherwise.
+    编译产物必须与运行在同一容器中才能持久可见，因此编译和运行
+    合并为一次容器生命周期。TLE 由容器内的 GNU timeout 保证（退出码 124）。
     """
     import docker
 
@@ -178,73 +222,7 @@ async def _run_in_docker(
         return JudgeResult(verdict=Verdict.ERR, message=f"Docker 环境不可用: {exc}")
 
     try:
-        container = client.containers.run(
-            image=settings.SANDBOX_IMAGE,
-            command=cmd,
-            working_dir="/sandbox",
-            volumes={workdir: {"bind": "/sandbox", "mode": "rw"}},
-            stdin_open=True,
-            network_disabled=settings.SANDBOX_NETWORK_DISABLED,
-            mem_limit=f"{memory_mb}m",
-            memswap_limit=f"{memory_mb}m",
-            cpu_period=100000,
-            cpu_quota=int(settings.SANDBOX_CPU_LIMIT * 100000),
-            pids_limit=settings.SANDBOX_PIDS_LIMIT,
-            read_only=True,
-            user=settings.SANDBOX_USER,
-            detach=True,
-        )
-
-        try:
-            # 等待容器完成或超时
-            exit_info = container.wait(timeout=timeout_ms / 1000 + 5)
-            exit_code = exit_info.get("StatusCode", -1)
-
-            # 收集输出
-            stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
-            stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
-
-            # 截断输出
-            max_bytes = settings.SANDBOX_MAX_OUTPUT_BYTES
-            stdout = stdout[:max_bytes]
-            stderr = stderr[:max_bytes]
-
-            if exit_code == 0:
-                return JudgeResult(
-                    verdict=Verdict.AC,
-                    stdout=stdout.strip(),
-                    stderr=stderr.strip(),
-                )
-            elif exit_code == 137:
-                # SIGKILL (内存超限)
-                return JudgeResult(
-                    verdict=Verdict.RE,
-                    stderr="Memory Limit Exceeded",
-                    message="内存超限",
-                )
-            elif exit_code == 124:
-                return JudgeResult(
-                    verdict=Verdict.TLE,
-                    message="时间超限",
-                )
-            else:
-                return JudgeResult(
-                    verdict=Verdict.RE,
-                    stderr=stderr.strip(),
-                    message=f"Runtime Error (exit code {exit_code})",
-                )
-
-        except Exception as exc:
-            # 超时或容器异常
-            if "timeout" in str(exc).lower() or "timed out" in str(exc).lower():
-                return JudgeResult(verdict=Verdict.TLE, message="时间超限")
-            return JudgeResult(verdict=Verdict.ERR, message=f"执行异常: {exc}")
-        finally:
-            try:
-                container.remove(force=True)
-            except Exception as exc:
-                logger.warning("Failed to remove judge container: %s", exc)
-
+        container = _create_judge_container(client, memory_mb)
     except docker.errors.ImageNotFound:
         return JudgeResult(
             verdict=Verdict.ERR,
@@ -252,6 +230,103 @@ async def _run_in_docker(
         )
     except docker.errors.APIError as exc:
         return JudgeResult(verdict=Verdict.ERR, message=f"Docker API 错误: {exc}")
+
+    try:
+        # 注入源码 + 输入文件（put_archive 由 daemon 直接写入容器，
+        # 规避 bind-mount 对容器内路径无法被宿主解析的限制）
+        extra = {"input.txt": stdin_data} if stdin_data else None
+        container.put_archive("/sandbox", _build_tar(Path(workdir), extra))
+
+        if config["compile_cmd"] is not None:
+            compile_result = await _exec_in_container(
+                container,
+                workdir,
+                config["compile_cmd"],
+                config["compile_timeout_ms"],
+                "",
+            )
+            if compile_result.verdict != Verdict.AC:
+                return JudgeResult(
+                    verdict=Verdict.CE,
+                    stderr=compile_result.stderr,
+                    message=f"编译错误: {compile_result.stderr[:200]}",
+                )
+
+        return await _exec_in_container(
+            container,
+            workdir,
+            config["run_cmd"],
+            timeout_ms,
+            stdin_data,
+        )
+    except Exception as exc:
+        logger.error("Judge container exec failed: %s", exc)
+        return JudgeResult(verdict=Verdict.ERR, message=f"执行异常: {exc}")
+    finally:
+        try:
+            container.remove(force=True)
+        except Exception as exc:
+            logger.warning("Failed to remove judge container: %s", exc)
+
+
+async def _exec_in_container(
+    container,
+    workdir: str,
+    cmd: list[str],
+    timeout_ms: int,
+    stdin_data: str,
+) -> JudgeResult:
+    """在容器中执行一条命令（timeout 包装 + 输入文件重定向 + 输出采集）。"""
+    extra = {"input.txt": stdin_data} if stdin_data else None
+    container.put_archive("/sandbox", _build_tar(Path(workdir), extra))
+
+    timeout_sec = max(1, timeout_ms // 1000)
+    shell_cmd = f"timeout {timeout_sec}s " + " ".join(shlex.quote(c) for c in cmd)
+    if stdin_data:
+        shell_cmd += " < input.txt"
+    exec_result = container.exec_run(
+        ["sh", "-c", shell_cmd],
+        demux=True,
+        workdir="/sandbox",
+    )
+
+    exit_code = exec_result.exit_code
+    if isinstance(exec_result.output, tuple):
+        out, err = exec_result.output
+    else:
+        out, err = exec_result.output, b""
+    stdout = (out or b"").decode("utf-8", errors="replace")
+    stderr = (err or b"").decode("utf-8", errors="replace")
+
+    max_bytes = settings.SANDBOX_MAX_OUTPUT_BYTES
+    stdout = stdout[:max_bytes]
+    stderr = stderr[:max_bytes]
+
+    if exit_code == 0:
+        return JudgeResult(
+            verdict=Verdict.AC,
+            stdout=stdout.strip(),
+            stderr=stderr.strip(),
+        )
+    elif exit_code == 124:
+        # timeout 命令在超限时杀死子进程并返回 124
+        return JudgeResult(
+            verdict=Verdict.TLE,
+            message="时间超限",
+        )
+    elif exit_code == 137:
+        # SIGKILL (内存超限)
+        return JudgeResult(
+            verdict=Verdict.RE,
+            stderr="Memory Limit Exceeded",
+            message="内存超限",
+        )
+    else:
+        return JudgeResult(
+            verdict=Verdict.RE,
+            stderr=stderr.strip(),
+            message=f"Runtime Error (exit code {exit_code})",
+        )
 
 
 def _normalize_output(text: str) -> str:

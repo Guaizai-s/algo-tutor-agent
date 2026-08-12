@@ -264,8 +264,12 @@ async def execute_problem_code(
         await db.commit()
         if verdict == "AC":
             message = f"全部 {total} 个测试用例通过，答案正确 (AC)"
+        elif verdict == "ERR":
+            message = f"判题服务暂时不可用，本次作答未记录：{fail_message} 请稍后重试。"
         else:
             message = f"答案错误 (verdict={verdict})：通过 {passed}/{total} 个用例。{fail_message}"
+        # ERR（沙箱故障）对外归一化为 N/A，避免泄露内部错误码给前端
+        resp_verdict = "N/A" if verdict == "ERR" else verdict
         return CodeExecutionResponse.model_validate(
             {
                 "status": _normalize_exec_status(verdict),
@@ -277,7 +281,7 @@ async def execute_problem_code(
                 "input_source": "sample",
                 "message": message,
                 "is_real_judge": True,
-                "verdict": verdict,
+                "verdict": resp_verdict,
                 "total_cases": total,
                 "passed_cases": passed,
             }
