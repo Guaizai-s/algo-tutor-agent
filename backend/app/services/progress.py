@@ -29,8 +29,9 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.config import settings
 from app.models.codeforces import RatingHistory, Submission
@@ -68,8 +69,16 @@ async def get_progress_overview(db: AsyncSession, user_id: UUID) -> ProgressOver
 
     所有查询均为只读，不修改数据库。
     """
-    # 1. 知识点总数
-    total_kp = (await db.execute(select(func.count(KnowledgePoint.id)))).scalar_one()
+    # 1. 知识点总数（真实知识点 = 叶子节点，不含分类根与 subtag 虚拟节点；
+    #    与算法路线图页的统计口径保持一致）
+    child = aliased(KnowledgePoint)
+    total_kp = (
+        await db.execute(
+            select(func.count(KnowledgePoint.id)).where(
+                ~exists(select(1).select_from(child).where(child.parent_id == KnowledgePoint.id))
+            )
+        )
+    ).scalar_one()
 
     # 2. 用户已掌握知识点数（mastery >= 0.8 且 AC >= 3 且非 weak）
     mastered_kp = await _count_mastered_knowledge(db, user_id)
@@ -234,14 +243,19 @@ async def _count_mastered_knowledge(db: AsyncSession, user_id: UUID) -> int:
     spec: mastery >= 0.8 且 AC >= 3 且非 weak。
     不能只看 UserKnowledgeState.mastery，必须同时校验 AC 数。
     """
-    # 加载用户所有非 weak 且 mastery >= 0.8 的知识点
+    # 加载用户所有非 weak 且 mastery >= 0.8 的知识点（仅限真实知识点 = 叶子节点，
+    # 与 total_knowledge_points 口径一致，避免掌握比例失真）
+    child = aliased(KnowledgePoint)
     states = (
         (
             await db.execute(
-                select(UserKnowledgeState.knowledge_id).where(
+                select(UserKnowledgeState.knowledge_id)
+                .join(KnowledgePoint, UserKnowledgeState.knowledge_id == KnowledgePoint.id)
+                .where(
                     UserKnowledgeState.user_id == user_id,
                     UserKnowledgeState.mastery >= MASTERY_THRESHOLD,
                     UserKnowledgeState.is_weak.is_(False),
+                    ~exists(select(1).select_from(child).where(child.parent_id == KnowledgePoint.id)),
                 )
             )
         )
