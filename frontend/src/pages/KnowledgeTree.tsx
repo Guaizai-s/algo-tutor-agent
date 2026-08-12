@@ -15,7 +15,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { knowledgeApi, learningApi, coldstartApi, dailyTaskApi, DEV_USER_ID } from '../utils/api'
+import { knowledgeApi, learningApi, coldstartApi, dailyTaskApi } from '../utils/api'
 import type { KnowledgePointRef, RoadmapKnowledgeNode, RoadmapNodeStatus, DailyTaskTodayResponse } from '../types'
 
 interface KnowledgeNode extends RoadmapKnowledgeNode {
@@ -114,12 +114,8 @@ const KnowledgeTree: React.FC = () => {
       // 并行加载知识树、路线图状态和今日任务
       const [treeResp, roadmapResp, todayResp] = await Promise.all([
         knowledgeApi.getTree(),
-<<<<<<< HEAD
         learningApi.getRoadmap().catch(() => null),
-=======
-        learningApi.getRoadmap(DEV_USER_ID).catch(() => null),
-        dailyTaskApi.getToday(DEV_USER_ID).catch(() => null),
->>>>>>> 931ba58 (feat: 路线图与今日任务联动 + 理论/实践双维度验收)
+        dailyTaskApi.getToday().catch(() => null),
       ])
 
       const kpItems = treeResp.data as Array<{

@@ -133,14 +133,10 @@ def calibrate_starting_order(
     mastered = {
         knowledge_id
         for knowledge_id, state in user_states.items()
-        if state.mastery >= MASTERY_THRESHOLD
-        and not state.is_weak
-        and knowledge_id in topo_position
+        if state.mastery >= MASTERY_THRESHOLD and not state.is_weak and knowledge_id in topo_position
     }
     weak = {
-        knowledge_id
-        for knowledge_id, state in user_states.items()
-        if state.is_weak and knowledge_id in topo_position
+        knowledge_id for knowledge_id, state in user_states.items() if state.is_weak and knowledge_id in topo_position
     }
 
     prereq_map: dict[UUID, list[UUID]] = defaultdict(list)
@@ -149,9 +145,7 @@ def calibrate_starting_order(
             prereq_map[knowledge_id].append(prerequisite_id)
 
     furthest_mastered = (
-        max(mastered, key=lambda knowledge_id: topo_position.get(knowledge_id, -1))
-        if mastered
-        else None
+        max(mastered, key=lambda knowledge_id: topo_position.get(knowledge_id, -1)) if mastered else None
     )
     furthest_descendants: set[UUID] = set()
     if furthest_mastered is not None:
