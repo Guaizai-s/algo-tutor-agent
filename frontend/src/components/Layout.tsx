@@ -13,6 +13,7 @@ import {
   X,
   CalendarCheck,
   UserCircle,
+  ClipboardCheck,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -23,6 +24,7 @@ const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const navItems = [
+    { path: '/assess', label: '摸底测试', icon: ClipboardCheck },
     { path: '/today', label: '今日学习', icon: CalendarCheck },
     { path: '/knowledge', label: '算法路线图', icon: BookOpen },
     { path: '/problems', label: '题库', icon: Code2 },

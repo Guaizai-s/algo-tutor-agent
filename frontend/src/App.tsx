@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import Assess from './pages/Assess'
 import KnowledgeTree from './pages/KnowledgeTree'
 import KnowledgeDetail from './pages/KnowledgeDetail'
 import ProblemList from './pages/ProblemList'
@@ -32,6 +33,7 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="assess" element={<Assess />} />
           <Route path="today" element={<TodayTask />} />
           <Route path="profile" element={<Profile />} />
           <Route path="knowledge" element={<KnowledgeTree />} />

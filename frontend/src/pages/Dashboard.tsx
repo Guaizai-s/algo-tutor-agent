@@ -106,6 +106,25 @@ const Dashboard: React.FC = () => {
         <p className="text-gray-600 mt-2">今天也要加油练习算法哦</p>
       </div>
 
+      {/* 摸底测试引导卡 */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0">
+          <Zap size={20} />
+        </div>
+        <div className="flex-1">
+          <p className="font-medium text-blue-900">还没有做过摸底测试？</p>
+          <p className="text-sm text-blue-700 mt-0.5">
+            通过 15 道覆盖核心知识点的诊断题，系统能快速判断你的真实水平，并据此定制每日学习推送，让题目难度与你的能力精准匹配。
+          </p>
+        </div>
+        <Link
+          to="/assess"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+        >
+          开始摸底
+        </Link>
+      </div>
+
       {/* CF 绑定状态卡片 */}
       {cfBound ? (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">

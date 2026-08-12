@@ -265,6 +265,19 @@ export interface CodeExecutionResult {
   passed_cases: number
 }
 
+// ===== 摸底测试 / 冷启动 types =====
+
+export interface ColdStartResult {
+  user_id: string
+  method: 'codeforces' | 'diagnostic'
+  target_rating_min: number
+  target_rating_max: number
+  mastered_count: number
+  weak_count: number
+  next_available_count: number
+  diagnostic_problems: string[]
+}
+
 // ===== Agent types =====
 
 export interface AgentReference {

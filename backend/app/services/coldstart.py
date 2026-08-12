@@ -203,9 +203,23 @@ async def diagnostic_cold_start(
     - 5 易 + 7 中 + 3 难
     - 覆盖 10 个不同知识点
     """
-    # 取 10 个核心知识点（按 order 排序）
+    # 取 10 个核心知识点（按 order 排序）：只选当前已有平台自建题的知识点，
+    # 否则会选到顺序靠前但题库里没有题目可测的知识点，导致诊断题为空。
     core_kps = (
-        (await db.execute(select(KnowledgePoint.id).order_by(KnowledgePoint.order, KnowledgePoint.name).limit(10)))
+        (
+            await db.execute(
+                select(KnowledgePoint.id)
+                .join(ProblemKnowledgePoint, ProblemKnowledgePoint.knowledge_id == KnowledgePoint.id)
+                .join(Problem, Problem.id == ProblemKnowledgePoint.problem_id)
+                .where(
+                    Problem.source == ProblemSource.PLATFORM,
+                    Problem.status == ProblemStatus.PUBLISHED,
+                )
+                .group_by(KnowledgePoint.id, KnowledgePoint.order, KnowledgePoint.name)
+                .order_by(KnowledgePoint.order, KnowledgePoint.name)
+                .limit(10)
+            )
+        )
         .scalars()
         .all()
     )

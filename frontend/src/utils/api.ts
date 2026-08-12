@@ -137,6 +137,8 @@ export const learningApi = {
 export const coldstartApi = {
   /** CF 冷启动：拉取 CF 提交记录，映射知识点。 */
   cfColdStart: () => api.post<ColdStartResultResponse>('/coldstart/cf'),
+  /** 诊断题冷启动：返回 15 道摸底测试题，初始化用户画像。 */
+  diagnostic: () => api.post<ColdStartResultResponse>('/coldstart/diagnostic'),
 }
 
 export const dailyTaskApi = {
