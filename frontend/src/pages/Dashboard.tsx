@@ -114,7 +114,8 @@ const Dashboard: React.FC = () => {
         <div className="flex-1">
           <p className="font-medium text-blue-900">还没有做过摸底测试？</p>
           <p className="text-sm text-blue-700 mt-0.5">
-            通过 15 道覆盖核心知识点的诊断题，系统能快速判断你的真实水平，并据此定制每日学习推送，让题目难度与你的能力精准匹配。
+            通过 15
+            道覆盖核心知识点的诊断题，系统能快速判断你的真实水平，并据此定制每日学习推送，让题目难度与你的能力精准匹配。
           </p>
         </div>
         <Link

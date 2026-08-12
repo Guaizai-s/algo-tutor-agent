@@ -356,9 +356,7 @@ const ProblemDetail: React.FC = () => {
                 {result.is_real_judge && (
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      result.verdict === 'AC'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-red-500 text-white'
+                      result.verdict === 'AC' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'
                     }`}
                   >
                     {result.verdict === 'AC'

@@ -376,14 +376,14 @@ const KnowledgeDetail: React.FC = () => {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{knowledge.name}</h1>
-        <div className="flex items-center gap-4 mt-2">
-          <DifficultySemicircle
-            comprehension={knowledge.comprehension_difficulty ?? 1}
-            theory={knowledge.theory_depth ?? 1}
-            size={120}
-            showLabels={true}
-          />
-        </div>
+          <div className="flex items-center gap-4 mt-2">
+            <DifficultySemicircle
+              comprehension={knowledge.comprehension_difficulty ?? 1}
+              theory={knowledge.theory_depth ?? 1}
+              size={120}
+              showLabels={true}
+            />
+          </div>
         </div>
       </div>
 

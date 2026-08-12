@@ -180,7 +180,8 @@ const KnowledgeTree: React.FC = () => {
           theory_done: rm?.theory_done ?? false,
           practice_mastery: rm?.practice_mastery ?? null,
           theory_lecture_count: rm?.theory_lecture_count ?? 0,
-          comprehension_difficulty: rm?.comprehension_difficulty ?? kp.comprehension_difficulty ?? 1,
+          comprehension_difficulty:
+            rm?.comprehension_difficulty ?? kp.comprehension_difficulty ?? 1,
           theory_depth: rm?.theory_depth ?? kp.theory_depth ?? 1,
           children: [],
         })

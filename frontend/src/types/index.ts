@@ -85,7 +85,6 @@ export interface CodeTemplate {
   explanation: string | null
 }
 
-
 export interface ChatMessage {
   id: string
   conversation_id: string

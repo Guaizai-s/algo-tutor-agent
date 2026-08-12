@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle, XCircle, ChevronRight, Trophy } from 'lucide-react'
+import {
+  ArrowLeft,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  ChevronRight,
+  Trophy,
+} from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { coldstartApi, problemsApi } from '../utils/api'
 import type { ColdStartResult, CodeExecutionResult, Problem } from '../types'
@@ -41,13 +49,16 @@ const Assess: React.FC = () => {
           setLoading(false)
           return
         }
-        return Promise.all(ids.map((pid) => problemsApi.getById(pid).then((p) => p.data as Problem)))
+        return Promise.all(
+          ids.map((pid) => problemsApi.getById(pid).then((p) => p.data as Problem))
+        )
       })
       .then((list) => {
         if (cancelled) return
         if (list) {
           setProblems(list)
-          const tpl = (list[0]?.solution_template as Record<string, string> | null)?.['python'] || ''
+          const tpl =
+            (list[0]?.solution_template as Record<string, string> | null)?.['python'] || ''
           setCode(tpl || '# 在这里写你的代码\n')
         }
       })
@@ -82,11 +93,17 @@ const Assess: React.FC = () => {
           passed: r.passed_cases,
           total: r.total_cases,
         }
-        return exists ? prev.map((a) => (a.problemId === currentProblem.id ? answer : a)) : [...prev, answer]
+        return exists
+          ? prev.map((a) => (a.problemId === currentProblem.id ? answer : a))
+          : [...prev, answer]
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '运行失败，请重试'
-      setExecResult({ status: 'internal_error', verdict: 'N/A', message: msg } as CodeExecutionResult)
+      setExecResult({
+        status: 'internal_error',
+        verdict: 'N/A',
+        message: msg,
+      } as CodeExecutionResult)
     } finally {
       setRunning(false)
     }
@@ -96,7 +113,9 @@ const Assess: React.FC = () => {
     if (current + 1 < problems.length) {
       setCurrent(current + 1)
       setExecResult(null)
-      const tpl = (problems[current + 1]?.solution_template as Record<string, string> | null)?.['python'] || ''
+      const tpl =
+        (problems[current + 1]?.solution_template as Record<string, string> | null)?.['python'] ||
+        ''
       setCode(tpl || '# 在这里写你的代码\n')
     } else {
       setFinished(true)
@@ -253,7 +272,8 @@ const Assess: React.FC = () => {
                 <div className="flex items-center gap-3 mb-2">
                   {execResult.verdict === 'AC' ? (
                     <span className="flex items-center gap-1 px-3 py-1 rounded bg-green-600 text-white text-sm font-bold">
-                      <CheckCircle size={14} /> AC · {execResult.passed_cases}/{execResult.total_cases}
+                      <CheckCircle size={14} /> AC · {execResult.passed_cases}/
+                      {execResult.total_cases}
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 px-3 py-1 rounded bg-red-500 text-white text-sm font-bold">
