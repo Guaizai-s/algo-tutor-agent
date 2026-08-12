@@ -11,15 +11,24 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import KnowledgePoint
-from app.models.learning import WEAK_MASTERY_THRESHOLD, UserKnowledgeState
+from app.models.learning import (
+    WEAK_MASTERY_THRESHOLD,
+    LearningProfile,
+    ReviewRecord,
+    ReviewStage,
+    UserKnowledgeState,
+    UserProblemAC,
+)
 from app.models.notification import Notification, NotificationType
+from app.models.problem import Problem
+from app.models.wrongbook import WrongBookEntry
 from app.schemas.notification import RecommendationItem, RecommendationProblem, RecommendationResponse
 from app.services.recommendation import recommend_problems_by_knowledge
 
@@ -236,6 +245,24 @@ async def send_daily_task_reminder(
 
 # ===== 推荐引擎 (Task 12.5) =====
 
+# 复习到期时间窗（小时）：next_review_at 落在此窗口内视为"即将/已到期"，参与加权
+REVIEW_DUE_WINDOW_HOURS = 24
+
+# 默认训练目标区间（无 LearningProfile 时，银牌向 1200-1600）
+DEFAULT_TARGET_MIN = 1200
+DEFAULT_TARGET_MAX = 1600
+
+
+def _band_distance(rating: float | None, target_min: float, target_max: float) -> float:
+    """计算题目 cf_rating 与目标区间的距离（0 = 落在区间内，None = 无穷远）。"""
+    if rating is None:
+        return float("inf")
+    if rating < target_min:
+        return target_min - rating
+    if rating > target_max:
+        return rating - target_max
+    return 0.0
+
 
 async def get_recommendations(
     db: AsyncSession,
@@ -243,15 +270,21 @@ async def get_recommendations(
     max_per_knowledge: int = 3,
     max_knowledge_points: int = 5,
 ) -> RecommendationResponse:
-    """基于薄弱知识点推荐未 AC 的题目。
+    """多信号融合推荐未 AC 的题目（P1-1 推荐融合）。
 
-    逻辑：
-    1. 取用户薄弱知识点（mastery > 0 且 < 0.5），按 mastery 升序（越薄弱越靠前）
-    2. 对每个薄弱知识点，找关联的已发布题目中用户未 AC 的
-    3. 按 cf_rating 升序（简单优先），每个知识点最多取 max_per_knowledge 题
-    4. 最多返回 max_knowledge_points 个知识点的推荐
+    信号与优先级：
+    1. 薄弱知识点（mastery > 0 且 < 0.5）为入口，mastery 越低越靠前
+    2. 知识点间次级排序：艾宾浩斯复习到期（review_due）优先
+    3. 知识点内题目排序：
+       a. 错题本中未解决的题目（错题重做）最高优先级
+       b. 与用户已 AC 题目标签重合的题（题型偏好）次之
+       c. 距目标 rating 区间最近的题（难度匹配）再次之
+       d. 同条件下 cf_rating 升序（简单优先）
+    4. 每个知识点/题目附带推荐理由（reasons 字段），供前端展示
     """
-    # 1. 获取薄弱知识点（按 mastery 升序）
+    now = datetime.now(UTC)
+
+    # 1. 薄弱知识点（先取全部，融合排序后再截断）
     weak_states = (
         await db.execute(
             select(
@@ -265,43 +298,127 @@ async def get_recommendations(
                 UserKnowledgeState.mastery > 0.0,
                 UserKnowledgeState.mastery < WEAK_MASTERY_THRESHOLD,
             )
-            .order_by(UserKnowledgeState.mastery.asc())
-            .limit(max_knowledge_points)
         )
     ).all()
 
     if not weak_states:
         return RecommendationResponse(user_id=user_id, items=[])
 
+    # 2. 复习到期信号：已到期/即将到期（24h 窗口内）且未完成的复习记录
+    review_rows = (
+        await db.execute(
+            select(ReviewRecord.knowledge_id, ReviewRecord.next_review_at).where(
+                ReviewRecord.user_id == user_id,
+                ReviewRecord.next_review_at.is_not(None),
+                ReviewRecord.next_review_at <= now + timedelta(hours=REVIEW_DUE_WINDOW_HOURS),
+                ReviewRecord.stage != ReviewStage.COMPLETED,
+            )
+        )
+    ).all()
+    review_due: dict[UUID, datetime] = {kid: t for kid, t in review_rows}
+
+    # 3. 错题信号：未解决错题的 problem_id 集合（错题重做优先）
+    wrong_rows = (
+        await db.execute(
+            select(WrongBookEntry.problem_id, func.count(WrongBookEntry.id))
+            .where(
+                WrongBookEntry.user_id == user_id,
+                WrongBookEntry.resolved == False,  # noqa: E712
+                WrongBookEntry.problem_id.is_not(None),
+            )
+            .group_by(WrongBookEntry.problem_id)
+        )
+    ).all()
+    wrongbook_ids = {pid for pid, _count in wrong_rows}
+
+    # 4. 题型偏好：用户已 AC 题目的标签集合
+    ac_tag_rows = (
+        (
+            await db.execute(
+                select(Problem.cf_tags)
+                .join(UserProblemAC, UserProblemAC.problem_id == Problem.id)
+                .where(UserProblemAC.user_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ac_tags: set[str] = {tag for tags in ac_tag_rows if tags for tag in tags}
+
+    # 5. 目标 rating 区间（无画像时用默认值，GET 场景不落库）
+    profile = (await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))).scalar_one_or_none()
+    tmin = float(profile.target_rating_min) if profile else float(DEFAULT_TARGET_MIN)
+    tmax = float(profile.target_rating_max) if profile else float(DEFAULT_TARGET_MAX)
+
+    # 知识点融合排序：mastery 升序（越薄弱越靠前）→ 复习到期优先 → 下次复习时间升序
+    weak_states.sort(
+        key=lambda row: (
+            row.mastery,
+            0 if row.knowledge_id in review_due else 1,
+            review_due.get(row.knowledge_id, datetime.max.replace(tzinfo=UTC)),
+        )
+    )
+
+    def _tag_match(p: Problem) -> bool:
+        return bool(p.cf_tags) and bool(set(p.cf_tags) & ac_tags)
+
     items: list[RecommendationItem] = []
-    for kid, mastery, kname in weak_states:
-        # 复用 recommendation.recommend_problems_by_knowledge()，避免重复查询逻辑
+    for kid, mastery, kname in weak_states[:max_knowledge_points]:
+        # 扩大候选池再精排（避免每知识点只取 max 个导致融合排序没有意义）
         candidates = await recommend_problems_by_knowledge(
             db,
             user_id,
             kid,
-            limit=max_per_knowledge,
+            limit=max_per_knowledge * 4,
         )
         if not candidates:
             continue
 
-        problems: list[RecommendationProblem] = [
-            RecommendationProblem(
-                problem_id=p.id,
-                title=p.title,
-                slug=p.slug,
-                difficulty=p.difficulty.value,
-                cf_rating=p.cf_rating,
+        candidates.sort(
+            key=lambda p: (
+                0 if p.id in wrongbook_ids else 1,
+                0 if _tag_match(p) else 1,
+                _band_distance(p.cf_rating, tmin, tmax),
+                p.cf_rating if p.cf_rating is not None else float("inf"),
+                p.created_at,
             )
-            for p in candidates
-        ]
+        )
 
+        problems: list[RecommendationProblem] = []
+        for p in candidates[:max_per_knowledge]:
+            reasons: list[str] = []
+            if p.id in wrongbook_ids:
+                reasons.append("错题重做")
+            if _tag_match(p):
+                reasons.append("题型偏好匹配")
+            if p.cf_rating is not None and tmin <= p.cf_rating <= tmax:
+                reasons.append("难度贴合目标区间")
+            if not reasons:
+                reasons.append("薄弱知识点补漏")
+            problems.append(
+                RecommendationProblem(
+                    problem_id=p.id,
+                    title=p.title,
+                    slug=p.slug,
+                    difficulty=p.difficulty.value,
+                    cf_rating=p.cf_rating,
+                    tags=p.cf_tags or [],
+                    reasons=reasons,
+                )
+            )
+
+        item_reasons = [f"薄弱知识点（掌握度 {int(mastery * 100)}%）"]
+        if kid in review_due:
+            item_reasons.append("复习到期")
         items.append(
             RecommendationItem(
                 knowledge_id=kid,
                 knowledge_name=kname,
                 mastery=int(mastery * 100),
                 problems=problems,
+                review_due=kid in review_due,
+                next_review_at=review_due.get(kid),
+                reasons=item_reasons,
             )
         )
 
@@ -350,6 +467,8 @@ async def send_recommendation_push(
             + "、".join(problem_titles)
             + "。打开今日学习查看全部推荐。"
         )
+        if item.review_due:
+            body = f"「{item.knowledge_name}」已到复习期，先回顾再练题：{body}"
         await create_notification(
             db,
             user_id=user_id,

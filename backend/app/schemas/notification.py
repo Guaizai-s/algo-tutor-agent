@@ -45,6 +45,8 @@ class RecommendationProblem(BaseSchema):
     slug: str
     difficulty: str
     cf_rating: float | None
+    tags: list[str] = Field(default_factory=list, description="题目 CF 标签")
+    reasons: list[str] = Field(default_factory=list, description="推荐理由（错题重做/题型偏好/难度匹配等）")
 
 
 class RecommendationItem(BaseSchema):
@@ -54,6 +56,9 @@ class RecommendationItem(BaseSchema):
     knowledge_name: str
     mastery: int = Field(..., ge=0, le=100, description="当前掌握度百分比")
     problems: list[RecommendationProblem]
+    review_due: bool = Field(default=False, description="该知识点是否已到艾宾浩斯复习期")
+    next_review_at: datetime | None = Field(default=None, description="下次复习时间（复习到期时非空）")
+    reasons: list[str] = Field(default_factory=list, description="知识点推荐理由（薄弱/复习到期）")
 
 
 class RecommendationResponse(BaseSchema):
