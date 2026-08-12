@@ -15,7 +15,6 @@ COMPAT: author_id 显式从查询参数/请求体传入，等认证落地后改�
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -43,8 +42,6 @@ from app.services.discussion import (
     list_discussions,
     update_discussion,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/discussions", tags=["discussions"])
 

@@ -5,7 +5,6 @@ Returns published problems. Never exposes test_cases in any response.
 
 from __future__ import annotations
 
-import logging
 import math
 from uuid import UUID
 
@@ -20,8 +19,6 @@ from app.models.knowledge import KnowledgePoint
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.schemas.problem import CodeExecutionRequest, CodeExecutionResponse, ProblemListResponse, ProblemRead
 from app.tools import code_execution
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/problems", tags=["problems"])
 

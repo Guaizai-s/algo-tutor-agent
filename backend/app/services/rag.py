@@ -45,7 +45,7 @@ class RAGService:
 
         embedding = await self._embed(query)
         if embedding is not None and await self._pgvector_ready():
-            results = await self._semantic_search(query, embedding, level, limit)
+            results = await self._semantic_search(embedding, level, limit)
             if results:
                 return results
             # fall through to keyword fallback if semantic returned nothing
@@ -96,7 +96,6 @@ class RAGService:
 
     async def _semantic_search(
         self,
-        query: str,
         embedding: list[float],
         level: str | None,
         limit: int,

@@ -10,11 +10,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.services.judge import judge
 
 router = APIRouter(prefix="/judge", tags=["judge"])
@@ -47,7 +45,6 @@ class JudgeResponse(BaseModel):
 @router.post("/run", response_model=JudgeResponse)
 async def api_judge(
     req: JudgeRequest,
-    db: AsyncSession = Depends(get_db),
 ) -> JudgeResponse:
     """提交代码并判题。
 

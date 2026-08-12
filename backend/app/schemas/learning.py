@@ -214,12 +214,3 @@ class RoadmapResponse(BaseSchema):
     has_path: bool
     tree: list[RoadmapKnowledgeNode]
     path_preview: list[KnowledgePointRef]
-
-
-# ===== internal helpers (not exposed as API) =====
-
-
-class _MissingSlots(BaseModel):
-    """内部用：缺失槽位收集。"""
-
-    slots: list[str] = Field(default_factory=list)

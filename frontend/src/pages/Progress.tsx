@@ -331,7 +331,6 @@ const ProgressPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/today')}
-            align-items="flex-end"
             className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
           >
             查看今日学习 <ArrowRight size={12} />
@@ -363,7 +362,6 @@ const ProgressPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/review')}
-            align-items="flex-end"
             className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
           >
             去复习 <ArrowRight size={12} />

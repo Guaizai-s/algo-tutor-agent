@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     # late import to set module-level singleton
     import app.services.rag as rag_module
     from app.services.openai_service import OpenAIService
-    from app.services.rag import RAGService, rag_service  # noqa: F401
+    from app.services.rag import RAGService
 
     openai_module.openai_service = OpenAIService()
     rag_module.rag_service = RAGService(async_session_maker, openai_module.openai_service)

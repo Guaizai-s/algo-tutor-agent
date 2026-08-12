@@ -10,7 +10,6 @@ COMPAT: user_id 显式传入，等认证落地后改 token。
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -29,8 +28,6 @@ from app.schemas.wrongbook import (
     WrongBookListResponse,
     WrongBookRecommendation,
 )
-
-logger = logging.getLogger(__name__)
 
 # 错题 verdict 类型
 WRONG_VERDICTS = {"WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", "RUNTIME_ERROR"}
@@ -191,9 +188,7 @@ async def get_recommendations(
 
     # 查找同类知识点的已发布题目，排除已 AC 题目和原题，按 cf_rating 升序
     candidate_ids = (
-        select(ProblemKnowledgePoint.problem_id)
-        .where(ProblemKnowledgePoint.knowledge_id.in_(kp_ids))
-        .distinct()
+        select(ProblemKnowledgePoint.problem_id).where(ProblemKnowledgePoint.knowledge_id.in_(kp_ids)).distinct()
     )
     stmt = (
         select(Problem)

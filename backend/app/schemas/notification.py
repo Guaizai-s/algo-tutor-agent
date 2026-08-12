@@ -34,17 +34,6 @@ class NotificationListResponse(BaseSchema):
     unread_count: int
 
 
-class NotificationCreateRequest(BaseSchema):
-    """创建通知请求（内部 service 使用，不暴露为 API）。"""
-
-    user_id: UUID
-    notification_type: NotificationType
-    title: str = Field(..., max_length=255)
-    body: str
-    related_knowledge_id: UUID | None = None
-    related_problem_id: UUID | None = None
-
-
 # ===== Recommendation schemas (Task 12 智能推送引擎) =====
 
 

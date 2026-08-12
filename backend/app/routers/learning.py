@@ -11,7 +11,6 @@ API:
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,8 +39,6 @@ from app.services.learning_path import (
     mark_knowledge_mastered,
     record_attempt,
 )
-
-logger = logging.getLogger(__name__)
 
 # 学习路径相关 API
 path_router = APIRouter(prefix="/learning-paths", tags=["learning-path"])

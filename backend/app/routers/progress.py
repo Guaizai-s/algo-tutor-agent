@@ -9,8 +9,6 @@ API:
 
 from __future__ import annotations
 
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,8 +28,6 @@ from app.services.progress import (
     get_progress_overview,
     recompute_mastery,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 

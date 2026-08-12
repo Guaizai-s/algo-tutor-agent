@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -20,8 +19,6 @@ from app.schemas.discussion import (
     DiscussionRead,
     DiscussionUpdate,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _comment_to_tree(comments: list[DiscussionComment]) -> list[DiscussionCommentRead]:

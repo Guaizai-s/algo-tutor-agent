@@ -11,7 +11,6 @@ API:
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -32,8 +31,6 @@ from app.services.wrongbook import (
     list_wrongbook,
     retry_wrongbook,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wrongbook", tags=["wrongbook"])
 

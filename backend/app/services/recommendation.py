@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,9 +20,6 @@ from sqlalchemy.orm import selectinload
 from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningProfile, UserProblemAC
 from app.models.problem import Problem, ProblemKnowledgePoint, ProblemStatus
-from app.schemas.learning import ProblemRef
-
-logger = logging.getLogger(__name__)
 
 
 async def _load_ac_problem_ids(db: AsyncSession, user_id: UUID) -> set[UUID]:
@@ -190,13 +186,3 @@ async def recommend_for_slots(
     no_rating = [p for p in no_rating if p.cf_rating is None]
 
     return template, application, challenge, no_rating, profile
-
-
-def to_problem_ref(p: Problem) -> ProblemRef:
-    return ProblemRef(
-        id=p.id,
-        title=p.title,
-        slug=p.slug,
-        difficulty=p.difficulty.value,
-        cf_rating=p.cf_rating,
-    )

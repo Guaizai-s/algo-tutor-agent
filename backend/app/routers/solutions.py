@@ -15,7 +15,6 @@ COMPAT: author_id 显式从查询参数/请求体传入，等认证落地后改�
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -26,8 +25,6 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models.problem import Problem, Solution, SolutionComment
 from app.schemas.common import BaseSchema, PageResponse
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/solutions", tags=["solutions"])
 

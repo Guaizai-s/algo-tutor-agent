@@ -5,7 +5,6 @@ Lists knowledge points and their lectures. Read-only.
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,8 +23,6 @@ from app.schemas.knowledge import (
     KnowledgePointRead,
     LectureRead,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 

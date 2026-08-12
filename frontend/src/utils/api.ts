@@ -2,8 +2,6 @@ import axios from 'axios'
 import type {
   AgentChatRequest,
   AgentChatResponse,
-  AttemptRequest,
-  AttemptResponse,
   BindCFRequest,
   BindCFResponse,
   CodeExecutionResult,
@@ -77,10 +75,6 @@ export const problemsApi = {
   getById: (id: string) => api.get(`/problems/${id}`),
   execute: (id: string, code: string, language: 'python' | 'cpp' | 'java') =>
     api.post<CodeExecutionResult>(`/problems/${id}/execute`, { code, language }),
-  submit: (id: string, code: string, language: string) =>
-    api.post(`/problems/${id}/submit`, { code, language }),
-  getHints: (id: string, level: number) => api.get(`/problems/${id}/hints`, { params: { level } }),
-  getSubmissions: (id: string) => api.get(`/problems/${id}/submissions`),
 }
 
 export const agentApi = {
@@ -90,9 +84,6 @@ export const agentApi = {
 export const progressApi = {
   getOverview: () => api.get('/progress/overview'),
   getActivity: (days = 30) => api.get('/progress/activity', { params: { days } }),
-  getWrongAnswers: () => api.get('/progress/wrong-answers'),
-  recomputeMastery: (knowledgeId?: string) =>
-    api.post('/progress/recompute', { knowledge_id: knowledgeId ?? null }),
 }
 
 export const wrongbookApi = {
@@ -105,7 +96,6 @@ export const wrongbookApi = {
 
 export const reviewApi = {
   getList: () => api.get('/review/list'),
-  getStatus: () => api.get('/review/status'),
   submitReview: (id: string, correct: boolean) => api.post(`/review/${id}/submit`, { correct }),
 }
 
@@ -127,12 +117,9 @@ export const submissionsApi = {
 }
 
 export const discussionApi = {
-  getSolutions: (problemId: string) => api.get(`/problems/${problemId}/solutions`),
   /** 全局题解列表（讨论区首页）。 */
   getGlobalSolutions: () => api.get('/solutions'),
   getSolutionById: (id: string) => api.get(`/solutions/${id}`),
-  createSolution: (problemId: string, data: { title: string; content: string; language: string }) =>
-    api.post(`/problems/${problemId}/solutions`, data),
   likeSolution: (id: string) => api.post(`/solutions/${id}/like`),
   getComments: (solutionId: string) => api.get(`/solutions/${solutionId}/comments`),
   createComment: (solutionId: string, content: string) =>
@@ -149,9 +136,6 @@ export const learningApi = {
   getCurrentPath: () => api.get<LearningPathRead>('/learning-paths/current'),
   /** 获取路线图聚合数据：知识树 + 用户学习状态。 */
   getRoadmap: () => api.get<RoadmapResponse>('/learning-paths/roadmap'),
-  /** 记录一次做题结果，触发路径动态调整。 */
-  recordAttempt: (req: AttemptRequest) =>
-    api.post<AttemptResponse>('/learning-paths/attempts', req),
   /** 标记知识点为已掌握（自评），跳过路径中对应项。 */
   markMastered: (req: MarkMasteredRequest) =>
     api.post<MarkMasteredResponse>('/learning-paths/mark-mastered', req),

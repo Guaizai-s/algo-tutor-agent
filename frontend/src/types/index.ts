@@ -85,19 +85,6 @@ export interface CodeTemplate {
   explanation: string | null
 }
 
-export interface Submission {
-  id: string
-  problem_id: string
-  user_id: string
-  code: string
-  language: 'cpp' | 'java' | 'python'
-  status: 'pending' | 'judging' | 'AC' | 'WA' | 'TLE' | 'RE' | 'CE'
-  time_used?: number
-  memory_used?: number
-  complexity_analysis?: string
-  code_review?: string
-  created_at: string
-}
 
 export interface ChatMessage {
   id: string
@@ -116,16 +103,6 @@ export interface Conversation {
   title: string
   created_at: string
   updated_at: string
-}
-
-export interface WrongAnswer {
-  id: string
-  problem: Problem
-  error_type: 'WA' | 'TLE' | 'RE'
-  error_message?: string
-  submission_id: string
-  created_at: string
-  similar_problems?: Problem[]
 }
 
 export interface Notification {
@@ -287,26 +264,6 @@ export interface ProfileUpdateRequest {
   school?: string | null
   atcoder_handle?: string | null
   target_medal?: TargetMedal | null
-}
-
-export interface Hint {
-  level: 1 | 2 | 3
-  content: string
-}
-
-export interface JudgeResult {
-  status: 'AC' | 'WA' | 'TLE' | 'RE' | 'CE'
-  time_used: number
-  memory_used: number
-  test_case_results?: {
-    status: 'AC' | 'WA' | 'TLE' | 'RE'
-    input: string
-    expected_output: string
-    actual_output?: string
-    time_used: number
-  }[]
-  complexity_analysis: string
-  code_review: string
 }
 
 export type CodeExecutionStatus =

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOpen,
@@ -16,7 +16,6 @@ import {
   UserCircle,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
-import { useState } from 'react'
 
 const Layout: React.FC = () => {
   const location = useLocation()
