@@ -13,8 +13,8 @@ interface Props {
   showLabels?: boolean
 }
 
-/** 双维度共用色阶（洛谷经典：灰→绿→蓝→紫→红） */
-const COLORS = ['#bfbfbf', '#52c41a', '#3498db', '#9d3dcf', '#e74c3c']
+/** 双维度共用色阶（洛谷五色：红→橙→黄→绿→青） */
+const COLORS = ['#fe4c61', '#f39c11', '#ffc116', '#52c41a', '#3498db']
 
 /** 1-5 → 中文 */
 const LABEL = ['', '入门', '基础', '提高', '省选', 'NOI']
