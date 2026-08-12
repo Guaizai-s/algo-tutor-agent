@@ -24,6 +24,7 @@ from app.models.learning import (
     UserKnowledgeState,
 )
 from app.models.problem import Problem, ProblemDifficulty, ProblemKnowledgePoint, ProblemSource, ProblemStatus
+from app.services.profile import rating_to_target
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ async def cf_cold_start(
 
     # 设置训练目标
     rating = account.current_rating or 1200
-    target_min, target_max = _rating_to_target(rating)
+    target_min, target_max = rating_to_target(rating)
     await _set_learning_profile(db, user_id, target_min, target_max)
 
     # 起点定标
@@ -381,24 +382,6 @@ async def _upsert_knowledge_state(
     else:
         existing.mastery = mastery
         existing.is_weak = is_weak
-
-
-def _rating_to_target(rating: int) -> tuple[int, int]:
-    """按 CF Rating 定训练目标。
-
-    spec:
-    - <1200 铜牌向
-    - 1200-1600 银牌向
-    - 1600-2000 金牌向
-    - >2000 高级向
-    """
-    if rating < 1200:
-        return (800, 1200)
-    if rating < 1600:
-        return (1200, 1600)
-    if rating < 2000:
-        return (1600, 2000)
-    return (2000, 2600)
 
 
 async def _set_learning_profile(

@@ -445,6 +445,11 @@ async def record_attempt(
         # 已是 weak 时，重复 WA 不再重复插入（10.2 要求）
     await db.flush()
 
+    # P0-4：按近期表现动态重估训练目标区间（内部有防抖，不做额外开销）
+    from app.services.profile import maybe_recalibrate_target
+
+    await maybe_recalibrate_target(db, user_id)
+
     return AttemptResponse(
         user_id=user_id,
         knowledge_id=knowledge_id,
