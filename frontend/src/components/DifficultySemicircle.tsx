@@ -1,177 +1,188 @@
 import React from 'react'
 
 /**
- * 双维度难度半圆图表
+ * 双维度难度半圆图表（洛谷配色风格）
  *
- * 整圆被水平分割为两半：
- * - 上半（左半弧）：理解难度 comprehension_difficulty（1-5）
- * - 下半（右半弧）：理论深度 theory_depth（1-5）
+ * 整圆被水平分割：
+ * - 上半弧：理解难度（comprehension_difficulty 1-5）
+ * - 下半弧：理论深度（theory_depth 1-5）
  *
- * 每半部分是一个半圆弧，弧度 = (value / 5) * 180°
- * 颜色从冷色到暖色渐变，值越高越深。
+ * 每半圆分为 5 段（36°/段），用洛谷经典色阶填充：
+ *   1=灰 2=绿 3=蓝 4=紫 5=红/黑
+ * 上半用暖色调（红结尾），下半用冷色调（黑结尾）。
+ *
+ * 填充区域从起点顺时针覆盖到当前值对应的角度。
  */
 
 interface DifficultySemicircleProps {
-  /** 理解难度 1-5 */
   comprehension: number
-  /** 理论深度 1-5 */
   theory: number
-  /** 整体尺寸，默认 120 */
   size?: number
-  /** 是否显示标签，默认 true */
   showLabels?: boolean
 }
 
-/** 理解难度 1-5 → 颜色 */
-const comprehensionColor = (v: number): string => {
-  const colors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444']
-  return colors[Math.min(Math.max(v, 1), 5) - 1] || colors[0]
-}
+// ---- 洛谷配色 ----
 
-/** 理论深度 1-5 → 颜色 */
-const theoryColor = (v: number): string => {
-  const colors = ['#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7']
-  return colors[Math.min(Math.max(v, 1), 5) - 1] || colors[0]
-}
+/** 理解难度（上半弧）1-5 → 洛谷暖色系 */
+const COMP_COLORS = ['#bfbfbf', '#52c41a', '#3498db', '#f39c11', '#fe4c61']
 
-/** 1-5 → 中文描述 */
-const levelLabel = (v: number): string => {
-  const labels = ['', '入门', '基础', '中等', '较难', '困难']
-  return labels[Math.min(Math.max(v, 1), 5)] || ''
+/** 理论深度（下半弧）1-5 → 洛谷冷色系 */
+const THEORY_COLORS = ['#bfbfbf', '#52c41a', '#3498db', '#9d3dcf', '#0e1d69']
+
+/** 1-5 → 中文等级名 */
+const LEVEL_LABELS = ['', '入门', '基础', '提高', '省选', 'NOI']
+
+const DEG_PER_SEG = 36 // 180° / 5
+
+/** 极坐标 → 笛卡尔坐标，0° = 12点方向，顺时针 */
+const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
 }
 
 const DifficultySemicircle: React.FC<DifficultySemicircleProps> = ({
   comprehension,
   theory,
-  size = 120,
+  size = 140,
   showLabels = true,
 }) => {
   const cx = size / 2
   const cy = size / 2
-  const outerR = size / 2 - 4
-  const innerR = outerR - 10
-  const strokeW = outerR - innerR // 环宽度
+  const outerR = size / 2 - 8
+  const innerR = outerR - 14   // 圆环宽度
 
-  // 上半弧：从左(180°) 顺时针画到右(0°)，实际从180°画到(180 - angle)度
-  const compAngle = (comprehension / 5) * 180
+  // 上半弧：从 180°(左) 顺时针到 0°(右)
+  // 每段 36°，第 i 段覆盖 [180 - (i+1)*36, 180 - i*36]
+  const renderUpperSegments = () => {
+    const segments: React.ReactNode[] = []
+    for (let i = 0; i < 5; i++) {
+      const startA = 180 - (i + 1) * DEG_PER_SEG
+      const endA = 180 - i * DEG_PER_SEG
+      const isFilled = i < comprehension
+      const color = COMP_COLORS[i]
+      const sOuter = polarToCartesian(cx, cy, outerR, startA)
+      const eOuter = polarToCartesian(cx, cy, outerR, endA)
+      const sInner = polarToCartesian(cx, cy, innerR, startA)
+      const eInner = polarToCartesian(cx, cy, innerR, endA)
 
-  // 下半弧：从右(0°) 顺时针画到左(180°)，实际从0°画到(0 + angle)度
-  const theoryAngle = (theory / 5) * 180
-
-  /** 极坐标转笛卡尔坐标，角度从正上方(12点)顺时针 */
-  const polarToCartesian = (r: number, angleDeg: number) => {
-    const rad = ((angleDeg - 90) * Math.PI) / 180
-    return {
-      x: cx + r * Math.cos(rad),
-      y: cy + r * Math.sin(rad),
+      segments.push(
+        <path
+          key={`comp-${i}`}
+          d={`M ${sOuter.x} ${sOuter.y} A ${outerR} ${outerR} 0 0 1 ${eOuter.x} ${eOuter.y} L ${eInner.x} ${eInner.y} A ${innerR} ${innerR} 0 0 0 ${sInner.x} ${sInner.y} Z`}
+          fill={isFilled ? color : '#e5e7eb'}
+          opacity={isFilled ? 0.9 : 0.5}
+        />
+      )
     }
+    return segments
   }
 
-  /** 画弧线 path（从 startAngle 顺时针到 endAngle） */
-  const arcPath = (r: number, startAngle: number, endAngle: number) => {
-    const s = polarToCartesian(r, startAngle)
-    const e = polarToCartesian(r, endAngle)
-    const sweep = endAngle - startAngle <= 180 ? 0 : 1
-    return `M ${s.x} ${s.y} A ${r} ${r} 0 ${sweep} 1 ${e.x} ${e.y}`
+  // 下半弧：从 0°(右) 顺时针到 180°(左)
+  const renderLowerSegments = () => {
+    const segments: React.ReactNode[] = []
+    for (let i = 0; i < 5; i++) {
+      const startA = i * DEG_PER_SEG
+      const endA = (i + 1) * DEG_PER_SEG
+      const isFilled = i < theory
+      const color = THEORY_COLORS[i]
+      const sOuter = polarToCartesian(cx, cy, outerR, startA)
+      const eOuter = polarToCartesian(cx, cy, outerR, endA)
+      const sInner = polarToCartesian(cx, cy, innerR, startA)
+      const eInner = polarToCartesian(cx, cy, innerR, endA)
+
+      segments.push(
+        <path
+          key={`theory-${i}`}
+          d={`M ${sOuter.x} ${sOuter.y} A ${outerR} ${outerR} 0 0 1 ${eOuter.x} ${eOuter.y} L ${eInner.x} ${eInner.y} A ${innerR} ${innerR} 0 0 0 ${sInner.x} ${sInner.y} Z`}
+          fill={isFilled ? color : '#e5e7eb'}
+          opacity={isFilled ? 0.9 : 0.5}
+        />
+      )
+    }
+    return segments
   }
 
-  // 上半弧（理解难度）：左侧(180°) → 右侧(0°)，从180倒着到180-compAngle
-  const compOuterPath = arcPath(outerR, 180, 180 - compAngle)
-  const compInnerPath = arcPath(innerR, 180 - compAngle, 180)
+  // 刻度线
+  const renderTicks = () => {
+    const ticks: React.ReactNode[] = []
+    // 上半刻度：180°, 144°, 108°, 72°, 36°, 0°
+    for (let i = 0; i <= 5; i++) {
+      const a = 180 - i * DEG_PER_SEG
+      const s = polarToCartesian(cx, cy, innerR - 2, a)
+      const e = polarToCartesian(cx, cy, outerR + 2, a)
+      ticks.push(<line key={`tick-top-${i}`} x1={s.x} y1={s.y} x2={e.x} y2={e.y} stroke="#9ca3af" strokeWidth={1} />)
+    }
+    // 下半刻度：0°, 36°, 72°, 108°, 144°, 180°
+    for (let i = 0; i <= 5; i++) {
+      const a = i * DEG_PER_SEG
+      const s = polarToCartesian(cx, cy, innerR - 2, a)
+      const e = polarToCartesian(cx, cy, outerR + 2, a)
+      ticks.push(<line key={`tick-bot-${i}`} x1={s.x} y1={s.y} x2={e.x} y2={e.y} stroke="#9ca3af" strokeWidth={1} />)
+    }
+    return ticks
+  }
 
-  // 下半弧（理论深度）：右侧(0°) → 左侧(180°)，顺时针
-  const theoryOuterPath = arcPath(outerR, 0, theoryAngle)
-  const theoryInnerPath = arcPath(innerR, theoryAngle, 0)
-
-  const compColor = comprehensionColor(comprehension)
-  const theoryCol = theoryColor(theory)
+  // 水平分割线
+  const leftInner = polarToCartesian(cx, cy, innerR, 180)
+  const leftOuter = polarToCartesian(cx, cy, outerR, 180)
+  const rightInner = polarToCartesian(cx, cy, innerR, 0)
+  const rightOuter = polarToCartesian(cx, cy, outerR, 0)
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1.5">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* 背景圆环 */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={(outerR + innerR) / 2}
-          fill="none"
-          stroke="#e5e7eb"
-          strokeWidth={strokeW}
-          strokeDasharray={`${((outerR + innerR) / 2) * Math.PI} ${((outerR + innerR) / 2) * Math.PI}`}
-          strokeDashoffset={0}
-        />
-
-        {/* 上半弧 - 理解难度（填充扇形区域） */}
-        <path
-          d={`${compOuterPath} L ${polarToCartesian(innerR, 180 - compAngle).x} ${
-            polarToCartesian(innerR, 180 - compAngle).y
-          } ${compInnerPath} Z`}
-          fill={compColor}
-          opacity={0.85}
-        />
-
-        {/* 下半弧 - 理论深度（填充扇形区域） */}
-        <path
-          d={`${theoryOuterPath} L ${polarToCartesian(innerR, theoryAngle).x} ${
-            polarToCartesian(innerR, theoryAngle).y
-          } ${theoryInnerPath} Z`}
-          fill={theoryCol}
-          opacity={0.85}
-        />
-
+        {/* 上半段 */}
+        {renderUpperSegments()}
+        {/* 下半段 */}
+        {renderLowerSegments()}
+        {/* 刻度 */}
+        {renderTicks()}
         {/* 水平分割线 */}
-        <line x1={cx - outerR} y1={cy} x2={cx - innerR} y2={cy} stroke="#d1d5db" strokeWidth={1} />
-        <line x1={cx + innerR} y1={cy} x2={cx + outerR} y2={cy} stroke="#d1d5db" strokeWidth={1} />
+        <line x1={leftOuter.x} y1={leftOuter.y} x2={leftInner.x} y2={leftInner.y} stroke="#9ca3af" strokeWidth={1.5} />
+        <line x1={rightInner.x} y1={rightInner.y} x2={rightOuter.x} y2={rightOuter.y} stroke="#9ca3af" strokeWidth={1.5} />
 
-        {/* 中心刻度线（12点钟和6点钟） */}
-        <line x1={cx} y1={cy - outerR} x2={cx} y2={cy - outerR + 6} stroke="#9ca3af" strokeWidth={1} />
-        <line x1={cx} y1={cy + outerR - 6} x2={cx} y2={cy + outerR} stroke="#9ca3af" strokeWidth={1} />
-
-        {/* 中心文字 - 理解难度值 */}
+        {/* 中心文字 */}
         {showLabels && (
           <>
-            <text
-              x={cx}
-              y={cy - 6}
-              textAnchor="middle"
-              className="fill-gray-700"
-              style={{ fontSize: `${size * 0.18}px`, fontWeight: 600 }}
-            >
+            {/* 理解难度值 + 标签 */}
+            <text x={cx} y={cy - 8} textAnchor="middle" className="fill-gray-800"
+              style={{ fontSize: '18px', fontWeight: 700 }}>
               {comprehension}
             </text>
-            <text
-              x={cx}
-              y={cy + size * 0.1}
-              textAnchor="middle"
-              className="fill-gray-500"
-              style={{ fontSize: `${size * 0.085}px` }}
-            >
+            <text x={cx} y={cy + 2} textAnchor="middle" className="fill-gray-400"
+              style={{ fontSize: '10px' }}>
               理解
             </text>
-            <text
-              x={cx}
-              y={cy + size * 0.18}
-              textAnchor="middle"
-              className="fill-gray-500"
-              style={{ fontSize: `${size * 0.085}px` }}
-            >
-              {levelLabel(theory)}·理论
+            {/* 理论深度值 */}
+            <text x={cx} y={cy + 14} textAnchor="middle" className="fill-gray-800"
+              style={{ fontSize: '14px', fontWeight: 600 }}>
+              {theory}
+            </text>
+            <text x={cx} y={cy + 24} textAnchor="middle" className="fill-gray-400"
+              style={{ fontSize: '9px' }}>
+              {LEVEL_LABELS[theory]}·理论
             </text>
           </>
         )}
       </svg>
 
-      {/* 图例 */}
+      {/* 图例：展示完整色阶 */}
       {showLabels && (
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: compColor }} />
-            理解难度
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: theoryCol }} />
-            理论深度
-          </span>
+        <div className="flex flex-col gap-1 text-[10px] text-gray-500">
+          <div className="flex items-center gap-0.5">
+            <span className="w-8">理解</span>
+            {COMP_COLORS.map((c, i) => (
+              <span key={i} className="w-3 h-2.5 rounded-sm" style={{ backgroundColor: c }}
+                title={`${LEVEL_LABELS[i + 1]}(${i + 1})`} />
+            ))}
+          </div>
+          <div className="flex items-center gap-0.5">
+            <span className="w-8">理论</span>
+            {THEORY_COLORS.map((c, i) => (
+              <span key={i} className="w-3 h-2.5 rounded-sm" style={{ backgroundColor: c }}
+                title={`${LEVEL_LABELS[i + 1]}(${i + 1})`} />
+            ))}
+          </div>
         </div>
       )}
     </div>

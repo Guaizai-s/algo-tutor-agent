@@ -380,7 +380,7 @@ const KnowledgeDetail: React.FC = () => {
           <DifficultySemicircle
             comprehension={knowledge.comprehension_difficulty ?? 1}
             theory={knowledge.theory_depth ?? 1}
-            size={90}
+            size={120}
             showLabels={true}
           />
         </div>
