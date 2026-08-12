@@ -525,6 +525,27 @@ const KnowledgeTree: React.FC = () => {
           <p className="text-gray-600 mt-2">
             按 10 大分类组织的算法学习路线，融合 OI-wiki 与左程云讲义两大数据源
           </p>
+          {/* 难度色阶图例 */}
+          <div className="mt-3 flex items-center gap-6 text-xs text-gray-500">
+            {([
+              ['理解难度', '掌握知识点本身的难易程度'],
+              ['理论深度', '所需前置知识的进阶程度'],
+            ] as const).map(([label, hint]) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="font-medium" title={hint}>{label}</span>
+                {['#fe4c61', '#f39c11', '#ffc116', '#52c41a', '#3498db'].map((c, i) => (
+                  <span
+                    key={i}
+                    className="w-3.5 h-3.5 rounded-sm"
+                    style={{ background: c }}
+                    title={`${i + 1}`}
+                  />
+                ))}
+                <span className="ml-1 text-gray-400">1→5</span>
+              </div>
+            ))}
+            <span className="text-gray-400">节点半圆：左上=理解 / 右下=理论</span>
+          </div>
         </div>
         {!hasPath && !loading && !error && (
           <button
