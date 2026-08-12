@@ -117,8 +117,13 @@ export const notificationApi = {
 }
 
 export const submissionsApi = {
-  list: (params: { user_id: string; problem_id?: string; verdict?: string; page?: number; page_size?: number }) =>
-    api.get('/submissions', { params }),
+  list: (params: {
+    user_id: string
+    problem_id?: string
+    verdict?: string
+    page?: number
+    page_size?: number
+  }) => api.get('/submissions', { params }),
 }
 
 export const discussionApi = {

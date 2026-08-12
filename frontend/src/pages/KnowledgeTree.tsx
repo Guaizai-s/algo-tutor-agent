@@ -16,7 +16,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { knowledgeApi, learningApi, coldstartApi, dailyTaskApi } from '../utils/api'
-import type { KnowledgePointRef, RoadmapKnowledgeNode, RoadmapNodeStatus, DailyTaskTodayResponse } from '../types'
+import type {
+  KnowledgePointRef,
+  RoadmapKnowledgeNode,
+  RoadmapNodeStatus,
+  DailyTaskTodayResponse,
+} from '../types'
 
 interface KnowledgeNode extends RoadmapKnowledgeNode {
   children: KnowledgeNode[]
@@ -459,9 +464,7 @@ const KnowledgeTree: React.FC = () => {
               {node.lecture_count > 0 && (
                 <span
                   className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded ${
-                    node.theory_done
-                      ? 'bg-green-50 text-green-600'
-                      : 'bg-gray-100 text-gray-400'
+                    node.theory_done ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'
                   }`}
                   title={node.theory_done ? '讲义已读' : '讲义未读'}
                 >

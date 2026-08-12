@@ -396,10 +396,7 @@ const ProblemDetail: React.FC = () => {
               </div>
               <div className="space-y-1.5">
                 {submissions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="flex items-center gap-2 text-xs"
-                  >
+                  <div key={sub.id} className="flex items-center gap-2 text-xs">
                     {sub.verdict === 'OK' ? (
                       <CheckCircle size={12} className="text-green-400 flex-shrink-0" />
                     ) : (
