@@ -5,73 +5,22 @@
 - 后端: Python 3.12 + FastAPI + PostgreSQL + SQLAlchemy 2.0 (async)
 - 详见: project_memory.md
 
-## 多人协作规则（AI 必读）
+## 开发模式（单人开发，AI 必读）
 
-### 文件归属（不可跨区修改）
-前端已完成，两人共同推进后端剩余模块，按"内容侧 / 引擎侧"切分。
-（Role A 原为前端，维持前端维护 + 现有后端 + 内容侧；Role B 接引擎侧新模块）
-
-```
-# Role A 领地（前端维护 + 现有后端维护 + 知识点图谱维护 + 内容侧新模块）
-# —— 前端维护
-frontend/src/                       ← Role A（前端维护）
-# —— 现有后端模块维护
-backend/app/models/knowledge.py     ← Role A（含知识点图谱维护）
-backend/app/models/problem.py       ← Role A
-backend/app/routers/knowledge.py    ← Role A
-backend/app/routers/problems.py     ← Role A
-backend/app/routers/agent.py        ← Role A
-backend/app/services/rag.py         ← Role A
-backend/app/services/openai_service.py ← Role A
-backend/app/agents/                 ← Role A
-backend/app/tools/                  ← Role A
-backend/app/core/                   ← Role A（基础设施：config/database）
-# —— 内容侧新模块
-backend/app/routers/discussions.py  ← Role A（Task 15 讨论区）
-backend/app/routers/solutions.py    ← Role A（Task 15 题解）
-backend/app/routers/progress.py     ← Role A（Task 10 进度）
-backend/app/routers/wrongbook.py    ← Role A（Task 11 错题本）
-backend/app/routers/submissions.py  ← Role A（提交记录查询）
-backend/app/models/discussion.py    ← Role A（讨论区模型）
-backend/app/services/discussion.py  ← Role A（讨论区业务）
-backend/app/services/progress.py    ← Role A（进度业务）
-backend/app/services/wrongbook.py   ← Role A（错题本业务）
-
-# Role B 领地（引擎侧新模块：认证、判题、推送、复习）
-backend/app/routers/auth.py         ← Role B（Task 2 认证）
-backend/app/routers/judge.py        ← Role B（Task 8 判题）
-backend/app/routers/notifications.py ← Role B（Task 12 推送/提醒）
-backend/app/services/auth.py        ← Role B（认证业务）
-backend/app/services/judge.py       ← Role B（判题沙箱）
-backend/app/services/push.py        ← Role B（推送引擎）
-backend/app/services/review.py      ← Role B（艾宾浩斯复习）
-backend/app/models/user.py          ← Role B（用户模型）
-backend/app/models/submission.py    ← Role B（提交记录模型，供 Role A 路由查询用）
-backend/app/tasks/                  ← Role B（Celery 定时任务：复习提醒）
-
-# 共享（API 契约，谁实现谁维护对应文件）
-backend/app/schemas/                ← 各自维护自己模块的 schema 文件，可互读
-backend/alembic/                    ← 生成迁移者负责，PR 协调
-backend/app/main.py                 ← 谁新增 router 谁改，PR 协调
-```
-
-### 协作约定
-- **提交记录(submission)**：Role B 建模型 + 判题写入；Role A 建查询路由。两端通过 schema 对接，PR 协调。
-- **推送通知**：Role B 写推送引擎；Role A 的内容侧接口若需触发推送，调用 Role B 的 service，不直接改 push.py。
-- **Celery 定时任务**：归 Role B，复习/推送相关任务在此；其他模块需异步任务时单独建文件、PR 协调。
+本项目为单人开发模式：**所有文件均可自由修改，无领地/角色划分**。
+（原 Role A/B 分工已废弃，统一个开发者全栈负责前端 + 后端）
 
 ### 工作流程
 1. **开始工作前**：`git pull` 拉取最新代码
 2. **编写代码前**：先 `Read` 对应的 `backend/app/schemas/` 和 `spec.md`
-3. **只改自己领地的文件**，不要跨区修改
-4. **完成后**：`ruff check` / `npm run lint` → 提交 → 提 PR
-5. **PR 合入后**：通知其他人 `git pull`
-6. **每个功能完成后必须提交**：每完成一个独立功能点就 commit 一次，不要攒多个功能一起提交。保持 commit 粒度小、可追溯。
+3. **完成后**：`ruff check` / `npm run lint` → 提交 → 提 PR
+4. **PR 合入后**：`git pull` 同步
+5. **每个功能完成后必须提交**：每完成一个独立功能点就 commit 一次，不要攒多个功能一起提交。保持 commit 粒度小、可追溯。
 
 ### API 契约 = Schemas 目录
 - 所有 API 的 Request/Response 类型定义在 `backend/app/schemas/`
 - 后端实现路由前，先定义对应模块的 Schema 文件
-- 前端已联调完成；新增接口由实现者同步更新 Schema 并通知前端（Role B）
+- 前端已联调完成；新增接口时同步更新 Schema
 
 ## Lint & TypeCheck 命令
 - 后端 lint: `cd backend && ruff check .`
@@ -112,7 +61,7 @@ algo-tutor/
 - **任务完成且校验通过后主动 commit**，不要等用户催促；用户未明确要求时也按此规则提交（除非用户另有限制）。
 - **禁止把多个不相关任务塞进同一个 commit**；一次会话涉及多任务时，按任务边界拆成多个 commit，保持 commit 粒度小、可追溯。
 - commit message 聚焦"为什么"，遵循仓库现有风格（参考 `git log`）。
-- 仅提交自己领地内的文件，不 `git add -A`，按文件名精确添加，避免误带 `.env` / 凭据 / 大文件。
+- 按文件名精确添加文件，不 `git add -A`，避免误带 `.env` / 凭据 / 大文件。
 
 ### 提方案前必须验证，禁止纸面推理
 - **提出技术方案前**，必须实际验证可行性（编译 / 测试 / 查文档 / 检查依赖），不可停留在"我觉得这个方案可行"。
