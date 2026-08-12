@@ -63,11 +63,11 @@ const DifficultySemicircle: React.FC<Props> = ({
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-sm" style={{ background: COMP[ci] }} />
-            理解难度
+            理解难度 {comprehension} {LABEL[clamp(comprehension)]}
           </span>
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-sm" style={{ background: THEORY[ti] }} />
-            理论深度
+            理论深度 {theory} {LABEL[clamp(theory)]}
           </span>
         </div>
       )}
