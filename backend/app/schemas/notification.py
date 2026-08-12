@@ -62,7 +62,7 @@ class RecommendationItem(BaseSchema):
 
 
 class RecommendationResponse(BaseSchema):
-    """GET /api/v1/notifications/recommendations 响应。"""
+    """GET /api/v1/recommendations 响应。"""
 
     user_id: UUID
     items: list[RecommendationItem]

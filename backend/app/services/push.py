@@ -422,6 +422,15 @@ async def get_recommendations(
             )
         )
 
+    logger.info(
+        "recommendations: user=%s weak=%d review_due=%d wrongbook=%d ac_tags=%d items=%d",
+        user_id,
+        len(weak_states),
+        len(review_due),
+        len(wrongbook_ids),
+        len(ac_tags),
+        len(items),
+    )
     return RecommendationResponse(user_id=user_id, items=items)
 
 

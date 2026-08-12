@@ -532,6 +532,15 @@ async def recompute_mastery_for_knowledge(
         consecutive_wa=state.consecutive_wa if state else 0,
         last_active_at=state.updated_at if state else None,
     )
+    if new_mastery != base:
+        logger.info(
+            "mastery signals applied: user=%s knowledge=%s base=%.3f adjusted=%.3f consecutive_wa=%d",
+            user_id,
+            knowledge_id,
+            base,
+            new_mastery,
+            state.consecutive_wa if state else 0,
+        )
     new_weak = _classify_weak(new_mastery, old_weak)
     if new_mastery != old_mastery or new_weak != old_weak:
         await _upsert_state(db, user_id, knowledge_id, new_mastery, new_weak)
