@@ -353,6 +353,19 @@ const ProblemDetail: React.FC = () => {
               >
                 {getStatusIcon(result.status)}
                 <span className="font-medium">{getStatusText(result.status)}</span>
+                {result.is_real_judge && (
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      result.verdict === 'AC'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {result.verdict === 'AC'
+                      ? `AC · ${result.passed_cases}/${result.total_cases}`
+                      : `${result.verdict} · ${result.passed_cases}/${result.total_cases}`}
+                  </span>
+                )}
               </div>
 
               <div className="flex gap-6 mb-4">

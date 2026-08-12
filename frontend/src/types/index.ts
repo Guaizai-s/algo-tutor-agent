@@ -247,6 +247,8 @@ export interface ProfileUpdateRequest {
 export type CodeExecutionStatus =
   'success' | 'compile_error' | 'runtime_error' | 'timeout' | 'internal_error'
 
+export type Verdict = 'AC' | 'WA' | 'RE' | 'TLE' | 'CE' | 'N/A'
+
 export interface CodeExecutionResult {
   status: CodeExecutionStatus
   stdout: string
@@ -256,6 +258,11 @@ export interface CodeExecutionResult {
   truncated: boolean
   input_source: 'sample' | 'empty'
   message: string
+  /** 是否进行了真实判题（平台自建题有测试用例时为 true） */
+  is_real_judge: boolean
+  verdict: Verdict
+  total_cases: number
+  passed_cases: number
 }
 
 // ===== Agent types =====

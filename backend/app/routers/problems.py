@@ -15,12 +15,58 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.deps import CurrentUserOptional
 from app.models.knowledge import KnowledgePoint
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.schemas.problem import CodeExecutionRequest, CodeExecutionResponse, ProblemListResponse, ProblemRead
+from app.services import judge as judge_service
+from app.services.learning_path import record_attempt
 from app.tools import code_execution
 
 router = APIRouter(prefix="/problems", tags=["problems"])
+
+# 一次判题最多执行的测试用例数（防止超大题集拖慢响应）
+MAX_JUDGE_CASES = 12
+
+
+def _normalize_exec_status(verdict: str) -> str:
+    """把判题 verdict 映射为沙箱执行状态（保持前端既有 status 语义）。"""
+    return {
+        "AC": "success",
+        "WA": "success",
+        "TLE": "timeout",
+        "RE": "runtime_error",
+        "CE": "compile_error",
+    }.get(verdict, "internal_error")
+
+
+async def _judge_all_cases(
+    p: Problem,
+    req: CodeExecutionRequest,
+    test_cases: list[dict],
+    timeout_ms: int,
+    memory_limit_mb: int,
+) -> tuple[str, int, int, str, str]:
+    """逐用例真实判题，返回 (verdict, passed, total, stdout, message)。
+
+    任一用例失败即中断，返回对应 verdict（WA/TLE/RE/CE）。
+    """
+    passed = 0
+    for tc in test_cases:
+        result = await judge_service.judge(
+            source_code=req.code,
+            language=req.language,
+            test_input=tc.get("input", ""),
+            expected_output=tc.get("output", ""),
+            timeout_ms=timeout_ms,
+            memory_mb=memory_limit_mb,
+        )
+        if result.verdict == judge_service.Verdict.AC:
+            passed += 1
+            continue
+        message = result.message or f"用例 {passed + 1}/{len(test_cases)} 未通过"
+        return result.verdict.value, passed, len(test_cases), result.stdout, message
+    return "AC", passed, len(test_cases), "", ""
 
 
 def _to_read(p: Problem) -> ProblemRead:
@@ -144,28 +190,70 @@ async def execute_problem_code(
     problem_id: UUID,
     req: CodeExecutionRequest,
     db: AsyncSession = Depends(get_db),
+    user: CurrentUserOptional = None,
 ) -> CodeExecutionResponse:
     """在沙箱中直接运行代码，不让 LLM 参与执行关键路径。
 
-    有样例输入时使用样例输入；Codeforces 外链题目前没有同步题面和样例，
-    因此只能使用空输入运行，并明确告知调用方该结果不代表 AC。
+    平台自建题（有 test_cases）：执行真实判题（全量用例），
+    判定 AC/WA/TLE/RE/CE 并自动回传 record_attempt，打通
+    「做题 → 掌握度/学习路径更新」数据闭环。
+    Codeforces 外链题：没有同步题面和测试用例，使用空输入运行，
+    并明确告知调用方该结果不代表 AC。
     """
     p = (
         await db.execute(
-            select(Problem).where(
+            select(Problem)
+            .where(
                 Problem.id == problem_id,
                 Problem.status == ProblemStatus.PUBLISHED,
             )
+            .options(selectinload(Problem.knowledge_points))
         )
     ).scalar_one_or_none()
     if p is None:
         raise HTTPException(status_code=404, detail="problem not found or not published")
 
-    input_source = "sample" if p.sample_input is not None else "empty"
     timeout_ms = max(100, min(p.time_limit_ms, settings.SANDBOX_MAX_TIMEOUT_MS))
     problem_memory_mb = math.ceil(p.memory_limit_kb / 1024)
     memory_limit_mb = max(16, min(problem_memory_mb, settings.SANDBOX_MAX_MEMORY_MB))
 
+    test_cases = (getattr(p, "test_cases", None) or [])[:MAX_JUDGE_CASES]
+    if test_cases:
+        verdict, passed, total, stdout, fail_message = await _judge_all_cases(
+            p, req, test_cases, timeout_ms, memory_limit_mb
+        )
+        # 判题统计（判题结论回写题目热度）
+        p.submit_count += 1
+        if verdict == "AC":
+            p.accepted_count += 1
+        # 结果回传：AC/WA/TLE/RE/CE 均记录，ERR（沙箱故障）不算作答
+        knowledge_points = getattr(p, "knowledge_points", None) or []
+        if user is not None and knowledge_points and verdict != "ERR":
+            await record_attempt(db, user.id, knowledge_points[0].id, p.id, verdict)
+        await db.commit()
+        if verdict == "AC":
+            message = f"全部 {total} 个测试用例通过，答案正确 (AC)"
+        else:
+            message = f"答案错误 (verdict={verdict})：通过 {passed}/{total} 个用例。{fail_message}"
+        return CodeExecutionResponse.model_validate(
+            {
+                "status": _normalize_exec_status(verdict),
+                "stdout": stdout,
+                "stderr": "",
+                "exit_code": 0,
+                "time_used_ms": 0,
+                "truncated": False,
+                "input_source": "sample",
+                "message": message,
+                "is_real_judge": True,
+                "verdict": verdict,
+                "total_cases": total,
+                "passed_cases": passed,
+            }
+        )
+
+    # 无测试用例（CF 外链题）：仅运行样例/空输入，不判题、不回传
+    input_source = "sample" if p.sample_input is not None else "empty"
     result = await code_execution.execute(
         {
             "language": req.language,
@@ -185,5 +273,9 @@ async def execute_problem_code(
             **result,
             "input_source": input_source,
             "message": message,
+            "is_real_judge": False,
+            "verdict": "N/A",
+            "total_cases": 0,
+            "passed_cases": 0,
         }
     )

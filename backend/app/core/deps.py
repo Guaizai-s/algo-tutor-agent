@@ -63,8 +63,33 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    authorization: Annotated[str | None, Header()] = None,
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """与 get_current_user 相同，但未登录/无效 token 时返回 None 而非 401。
+
+    用于「匿名可访问、登录则记录行为」的接口（如运行代码/判题）。
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    payload = decode_access_token_or_none(token)
+    if payload is None:
+        return None
+    sub = payload.get("sub")
+    if not sub:
+        return None
+    try:
+        user_id = UUID(str(sub))
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+
+
 # 类型别名，便于路由签名
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUserOptional = Annotated[User | None, Depends(get_current_user_optional)]
 
 
 async def get_codeforces_api_client() -> AsyncGenerator[CodeforcesClient, None]:

@@ -38,7 +38,8 @@ def upgrade() -> None:
     op.create_index(op.f("ix_user_lecture_reads_knowledge_id"), "user_lecture_reads", ["knowledge_id"], unique=False)
     op.create_index(op.f("ix_user_lecture_reads_lecture_id"), "user_lecture_reads", ["lecture_id"], unique=False)
     op.create_index(op.f("ix_user_lecture_reads_user_id"), "user_lecture_reads", ["user_id"], unique=False)
-    op.drop_table("seed_meta")
+    # 早期 seed_db 脚本创建的旧表；全新库上不存在，需幂等删除
+    op.execute("DROP TABLE IF EXISTS seed_meta")
     # ### end Alembic commands ###
 
 

@@ -60,3 +60,8 @@ class CodeExecutionResponse(BaseSchema):
     truncated: bool
     input_source: Literal["sample", "empty"]
     message: str
+    # 真实判题结果（test_cases 存在时返回；仅样例/空输入运行时为 "N/A"）
+    is_real_judge: bool = False
+    verdict: Literal["AC", "WA", "RE", "TLE", "CE", "N/A"] = "N/A"
+    total_cases: int = 0
+    passed_cases: int = 0
