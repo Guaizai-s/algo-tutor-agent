@@ -13,11 +13,8 @@ interface Props {
   showLabels?: boolean
 }
 
-/** 理解难度（左上）暖色 */
-const COMP = ['#bfbfbf', '#52c41a', '#3498db', '#f39c11', '#fe4c61']
-
-/** 理论深度（右下）冷色 */
-const THEORY = ['#bfbfbf', '#52c41a', '#3498db', '#9d3dcf', '#0e1d69']
+/** 双维度共用色阶（洛谷经典：灰→绿→蓝→紫→红） */
+const COLORS = ['#bfbfbf', '#52c41a', '#3498db', '#9d3dcf', '#e74c3c']
 
 /** 1-5 → 中文 */
 const LABEL = ['', '入门', '基础', '提高', '省选', 'NOI']
@@ -33,7 +30,7 @@ const DifficultySemicircle: React.FC<Props> = ({
   const ti = clamp(theory) - 1
 
   // from 135deg: 分割线从左上到右下
-  const grad = `conic-gradient(from 135deg, ${COMP[ci]} 0deg 180deg, ${THEORY[ti]} 180deg 360deg)`
+  const grad = `conic-gradient(from 135deg, ${COLORS[ci]} 0deg 180deg, ${COLORS[ti]} 180deg 360deg)`
 
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -62,11 +59,11 @@ const DifficultySemicircle: React.FC<Props> = ({
       {showLabels && (
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm" style={{ background: COMP[ci] }} />
+            <span className="w-3 h-3 rounded-sm" style={{ background: COLORS[ci] }} />
             理解难度 {comprehension} {LABEL[clamp(comprehension)]}
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm" style={{ background: THEORY[ti] }} />
+            <span className="w-3 h-3 rounded-sm" style={{ background: COLORS[ti] }} />
             理论深度 {theory} {LABEL[clamp(theory)]}
           </span>
         </div>
