@@ -17,6 +17,7 @@ import rehypeKatex from 'rehype-katex'
 import { codeToHtml } from 'shiki/bundle/web'
 import 'katex/dist/katex.min.css'
 import { knowledgeApi } from '../utils/api'
+import DifficultySemicircle from '../components/DifficultySemicircle'
 import type { CodeTemplate, KnowledgePoint, Lecture } from '../types'
 
 // OI-wiki / mkdocs-material admonition 类型 → emoji + 标题映射
@@ -375,7 +376,14 @@ const KnowledgeDetail: React.FC = () => {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{knowledge.name}</h1>
-          <p className="text-gray-500">难度：{knowledge.difficulty}</p>
+        <div className="flex items-center gap-4 mt-2">
+          <DifficultySemicircle
+            comprehension={knowledge.comprehension_difficulty ?? 1}
+            theory={knowledge.theory_depth ?? 1}
+            size={90}
+            showLabels={true}
+          />
+        </div>
         </div>
       </div>
 

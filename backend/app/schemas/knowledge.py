@@ -21,6 +21,9 @@ class KnowledgePointRead(BaseSchema):
     # Codeforces 关联
     cf_tag: str | None = None
     cf_problem_count: int = 0
+    # 双维度难度评价（1-5 数值）
+    comprehension_difficulty: int = 1
+    theory_depth: int = 1
 
 
 class LectureRead(BaseSchema):

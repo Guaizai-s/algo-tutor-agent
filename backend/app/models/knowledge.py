@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, SmallInteger, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,11 @@ class KnowledgePoint(UUIDMixin, TimestampMixin, Base):
     # Codeforces 关联（CF tag 合并到知识点时填）
     cf_tag: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     cf_problem_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 双维度难度评价体系（1-5 数值）
+    # comprehension_difficulty: 理解难度——掌握该知识点本身的难易程度
+    # theory_depth: 理论深度——该知识点所需前置知识的进阶程度
+    comprehension_difficulty: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    theory_depth: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
 
     parent: Mapped["KnowledgePoint | None"] = relationship(
         "KnowledgePoint", remote_side="KnowledgePoint.id", back_populates="children"

@@ -742,6 +742,8 @@ async def get_roadmap_data(
                 theory_done=lecture_read_map.get(kid, 0) > 0,
                 practice_mastery=st.mastery if st else None,
                 theory_lecture_count=lecture_read_map.get(kid, 0),
+                comprehension_difficulty=kp.comprehension_difficulty,
+                theory_depth=kp.theory_depth,
             )
         )
 

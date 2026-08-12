@@ -31,6 +31,9 @@ export interface KnowledgePoint {
   // Codeforces 关联
   cf_tag?: string | null
   cf_problem_count?: number
+  // 双维度难度评价（1-5 数值）
+  comprehension_difficulty?: number
+  theory_depth?: number
 }
 
 export interface Problem {
@@ -497,6 +500,8 @@ export interface RoadmapKnowledgeNode {
   theory_done: boolean
   practice_mastery: number | null
   theory_lecture_count: number
+  comprehension_difficulty?: number
+  theory_depth?: number
 }
 
 export interface RoadmapResponse {

@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { knowledgeApi, learningApi, coldstartApi, dailyTaskApi } from '../utils/api'
+import DifficultySemicircle from '../components/DifficultySemicircle'
 import type {
   KnowledgePointRef,
   RoadmapKnowledgeNode,
@@ -25,6 +26,8 @@ import type {
 
 interface KnowledgeNode extends RoadmapKnowledgeNode {
   children: KnowledgeNode[]
+  comprehension_difficulty?: number
+  theory_depth?: number
 }
 
 // 10 个一级分类 → 颜色 + 图标（用于根节点视觉区分）
@@ -132,6 +135,8 @@ const KnowledgeTree: React.FC = () => {
         order: number
         lecture_count?: number
         template_count?: number
+        comprehension_difficulty?: number
+        theory_depth?: number
       }>
 
       // 构建 roadmap 状态索引
@@ -175,6 +180,8 @@ const KnowledgeTree: React.FC = () => {
           theory_done: rm?.theory_done ?? false,
           practice_mastery: rm?.practice_mastery ?? null,
           theory_lecture_count: rm?.theory_lecture_count ?? 0,
+          comprehension_difficulty: rm?.comprehension_difficulty ?? kp.comprehension_difficulty ?? 1,
+          theory_depth: rm?.theory_depth ?? kp.theory_depth ?? 1,
           children: [],
         })
       }
@@ -328,19 +335,6 @@ const KnowledgeTree: React.FC = () => {
     return { totalKp, totalLec, totalTpl, catCount: tree.length, mastered, learning }
   }, [tree])
 
-  const getDifficultyColor = (diff: string) => {
-    switch (diff) {
-      case 'easy':
-        return 'bg-green-500'
-      case 'medium':
-        return 'bg-yellow-500'
-      case 'hard':
-        return 'bg-red-500'
-      default:
-        return 'bg-gray-400'
-    }
-  }
-
   const renderNode = (node: KnowledgeNode, depth: number): React.ReactNode => {
     const isRoot = depth === 0
     const hasChildren = node.children.length > 0
@@ -387,8 +381,11 @@ const KnowledgeTree: React.FC = () => {
           ) : style.icon ? (
             <span className="flex-shrink-0">{style.icon}</span>
           ) : (
-            <span
-              className={`flex-shrink-0 w-2 h-2 rounded-full ${getDifficultyColor(node.difficulty)}`}
+            <DifficultySemicircle
+              comprehension={node.comprehension_difficulty ?? 1}
+              theory={node.theory_depth ?? 1}
+              size={28}
+              showLabels={false}
             />
           )}
 

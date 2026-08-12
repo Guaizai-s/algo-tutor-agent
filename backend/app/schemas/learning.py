@@ -202,6 +202,9 @@ class RoadmapKnowledgeNode(BaseSchema):
     theory_done: bool = Field(False, description="讲义已读（理论知识验收）")
     practice_mastery: float | None = Field(None, description="实践 mastery（AC 题数/关联题总数）")
     theory_lecture_count: int = Field(0, description="该知识点已读讲义数（分母为 lecture_count）")
+    # 双维度难度评价（1-5 数值）
+    comprehension_difficulty: int = 1
+    theory_depth: int = 1
 
 
 class RoadmapResponse(BaseSchema):
