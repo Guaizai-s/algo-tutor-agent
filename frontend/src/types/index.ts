@@ -255,7 +255,7 @@ export interface CodeExecutionResult {
   exit_code: number
   time_used_ms: number
   truncated: boolean
-  input_source: 'sample' | 'empty'
+  input_source: 'sample' | 'custom'
   message: string
   /** 是否进行了真实判题（平台自建题有测试用例时为 true） */
   is_real_judge: boolean

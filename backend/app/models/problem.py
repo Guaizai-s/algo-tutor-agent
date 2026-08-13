@@ -1,9 +1,10 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -95,6 +96,8 @@ class Problem(UUIDMixin, TimestampMixin, Base):
     memory_limit_kb: Mapped[int] = mapped_column(Integer, nullable=False, default=262144)
     sample_input: Mapped[str | None] = mapped_column(Text, nullable=True)
     sample_output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_sync_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hints: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     solution_template: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     test_cases: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)

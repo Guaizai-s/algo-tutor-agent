@@ -64,3 +64,57 @@ async def test_execute_problem_code_bypasses_agent_and_uses_sample(monkeypatch):
     assert response.status == "success"
     assert response.stdout == "3\n"
     assert response.input_source == "sample"
+
+
+@pytest.mark.asyncio
+async def test_execute_problem_code_prefers_explicit_custom_input(monkeypatch):
+    problem = SimpleNamespace(
+        status=ProblemStatus.PUBLISHED,
+        sample_input="sample\n",
+        time_limit_ms=1000,
+        memory_limit_kb=262144,
+    )
+    execute_mock = AsyncMock(
+        return_value={
+            "status": "success",
+            "stdout": "custom\n",
+            "stderr": "",
+            "exit_code": 0,
+            "time_used_ms": 10,
+            "truncated": False,
+        }
+    )
+    monkeypatch.setattr("app.routers.problems.code_execution.execute", execute_mock)
+
+    response = await execute_problem_code(
+        uuid4(),
+        CodeExecutionRequest(language="python", code="print(input())", stdin="custom\n"),
+        _FakeSession(problem),
+    )
+
+    assert execute_mock.await_args.args[0]["stdin"] == "custom\n"
+    assert response.input_source == "custom"
+
+
+@pytest.mark.asyncio
+async def test_execute_problem_code_rejects_missing_input(monkeypatch):
+    from fastapi import HTTPException
+
+    problem = SimpleNamespace(
+        status=ProblemStatus.PUBLISHED,
+        sample_input=None,
+        time_limit_ms=1000,
+        memory_limit_kb=262144,
+    )
+    execute_mock = AsyncMock()
+    monkeypatch.setattr("app.routers.problems.code_execution.execute", execute_mock)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await execute_problem_code(
+            uuid4(),
+            CodeExecutionRequest(language="python", code="print(input())"),
+            _FakeSession(problem),
+        )
+
+    assert exc_info.value.status_code == 422
+    execute_mock.assert_not_awaited()

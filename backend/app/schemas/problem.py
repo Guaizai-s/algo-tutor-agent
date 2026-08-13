@@ -47,6 +47,7 @@ class CodeExecutionRequest(BaseSchema):
 
     language: Literal["python", "cpp", "java"]
     code: str = Field(..., min_length=1, max_length=50000)
+    stdin: str | None = Field(default=None, max_length=100000)
 
 
 class CodeExecutionResponse(BaseSchema):
@@ -58,7 +59,7 @@ class CodeExecutionResponse(BaseSchema):
     exit_code: int
     time_used_ms: int
     truncated: bool
-    input_source: Literal["sample", "empty"]
+    input_source: Literal["sample", "custom"]
     message: str
     # 真实判题结果（test_cases 存在时返回；仅样例/空输入运行时为 "N/A"）
     is_real_judge: bool = False

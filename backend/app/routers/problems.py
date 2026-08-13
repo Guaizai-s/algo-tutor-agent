@@ -20,6 +20,7 @@ from app.models.knowledge import KnowledgePoint
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.schemas.problem import CodeExecutionRequest, CodeExecutionResponse, ProblemListResponse, ProblemRead
 from app.services import judge as judge_service
+from app.services.codeforces.content import sync_problem_content
 from app.services.learning_path import record_attempt
 from app.tools import code_execution
 
@@ -213,6 +214,7 @@ async def get_problem(
     p = (await db.execute(stmt)).scalar_one_or_none()
     if p is None:
         raise HTTPException(status_code=404, detail="problem not found or not published")
+    await sync_problem_content(p)
     return _to_read(p)
 
 
@@ -228,8 +230,8 @@ async def execute_problem_code(
     平台自建题（有 test_cases）：执行真实判题（全量用例），
     判定 AC/WA/TLE/RE/CE 并自动回传 record_attempt，打通
     「做题 → 掌握度/学习路径更新」数据闭环。
-    Codeforces 外链题：没有同步题面和测试用例，使用空输入运行，
-    并明确告知调用方该结果不代表 AC。
+    Codeforces 外链题：使用用户自定义输入或已同步的公开样例运行，
+    不存在输入时拒绝执行，避免空输入造成误导性 TLE。
     """
     p = (
         await db.execute(
@@ -287,13 +289,23 @@ async def execute_problem_code(
             }
         )
 
-    # 无测试用例（CF 外链题）：仅运行样例/空输入，不判题、不回传
-    input_source = "sample" if p.sample_input is not None else "empty"
+    # 无测试用例（CF 外链题）：仅运行自定义输入/公开样例，不判题、不回传。
+    if req.stdin is not None:
+        stdin = req.stdin
+        input_source = "custom"
+    elif p.sample_input is not None:
+        stdin = p.sample_input
+        input_source = "sample"
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="题目样例尚未同步，请填写自定义输入后再运行。",
+        )
     result = await code_execution.execute(
         {
             "language": req.language,
             "code": req.code,
-            "stdin": p.sample_input or "",
+            "stdin": stdin,
             "timeout_ms": timeout_ms,
             "memory_limit_mb": memory_limit_mb,
         }
@@ -301,7 +313,7 @@ async def execute_problem_code(
     message = (
         "已使用题目样例输入运行；运行成功不等于通过全部测试。"
         if input_source == "sample"
-        else "题目未提供样例输入，已使用空输入运行；此结果不代表通过题目。"
+        else "已使用自定义输入运行；运行成功不等于通过全部测试。"
     )
     return CodeExecutionResponse.model_validate(
         {

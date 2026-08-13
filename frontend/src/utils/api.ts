@@ -76,8 +76,12 @@ export const problemsApi = {
     sort?: 'newest' | 'oldest' | 'rating_asc' | 'rating_desc' | 'acceptance'
   }) => api.get('/problems/', { params }),
   getById: (id: string) => api.get(`/problems/${id}`),
-  execute: (id: string, code: string, language: 'python' | 'cpp' | 'java') =>
-    api.post<CodeExecutionResult>(`/problems/${id}/execute`, { code, language }),
+  execute: (
+    id: string,
+    code: string,
+    language: 'python' | 'cpp' | 'java',
+    stdin?: string
+  ) => api.post<CodeExecutionResult>(`/problems/${id}/execute`, { code, language, stdin }),
 }
 
 export const agentApi = {

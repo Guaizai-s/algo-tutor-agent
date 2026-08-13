@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     CF_API_MAX_RETRIES: int = 5
     CF_API_BACKOFF_BASE_SEC: float = 1.0
     CF_API_BACKOFF_MAX_SEC: float = 60.0
+    CF_CONTENT_BASE_URL: str = "https://www.luogu.com.cn/problem"
+    CF_CONTENT_CONNECT_TIMEOUT_SEC: float = 5.0
+    CF_CONTENT_READ_TIMEOUT_SEC: float = 15.0
+    CF_CONTENT_RETRY_AFTER_MINUTES: int = 30
 
     # 用户时区（用于 streak_days 自然日计算）
     # 数据库/容器运行在 UTC，但用户在 Asia/Shanghai
