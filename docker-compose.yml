@@ -33,8 +33,11 @@ services:
     build: ./backend
     container_name: algo-backend
     command: >
-      sh -c "alembic upgrade head &&
+      sh -c "python -m scripts.repair_alembic_version &&
+      alembic upgrade head &&
       python -m scripts.seed_db &&
+      python -m scripts.migrate_demo_to_official &&
+      python -m scripts.reorganize_categories &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
