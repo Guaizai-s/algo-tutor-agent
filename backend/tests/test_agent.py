@@ -69,6 +69,8 @@ async def test_agent_plain_answer(db_session, seed_data):
     resp = await agent.run(req)
     assert "动态规划" in resp.message
     assert resp.tool_calls == []
+    assert [step.kind for step in resp.trace] == ["understanding", "planning", "answer"]
+    assert all(step.status == "success" for step in resp.trace)
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@
 4. 重复同步幂等（不产生重复记录）
 5. GET /api/v1/progress/overview 返回的 streak_days / rating_history 正确接入
 
-完成验证后报告 PASS / FAIL。
+完成验证后报告 PASS / FAIL，并回滚所有 mock 数据。
 """
 
 from __future__ import annotations
@@ -251,6 +251,10 @@ async def run() -> int:
                 logger.info("=" * 60)
                 logger.info("ALL MANUAL SYNC VERIFICATION CHECKS PASSED")
                 logger.info("=" * 60)
+                # This is a verification script, not a data seeder. Rolling
+                # back prevents the periodic Celery job from polling the fake
+                # handle after a successful manual run.
+                await session.rollback()
                 return 0
 
     except Exception as e:

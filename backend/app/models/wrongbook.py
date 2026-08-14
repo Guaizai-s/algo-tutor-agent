@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class WrongBookEntry(UUIDMixin, TimestampMixin, Base):
     """错题本条目。
 
-    每个 WA/TLE/RE 的 submission 对应一条记录。
+    每个最终失败 verdict（如 WA/TLE/RE/CE）的 submission 对应一条记录。
     通过 (submission_id, user_id) 唯一约束保证幂等。
     """
 

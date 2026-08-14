@@ -145,10 +145,12 @@ const ProblemDetail: React.FC = () => {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getResultColor = (executionResult: CodeExecutionResult) => {
+    if (executionResult.verdict === 'AC') return 'text-green-600 bg-green-50'
+    if (executionResult.verdict !== 'N/A') return 'text-red-600 bg-red-50'
+    switch (executionResult.status) {
       case 'success':
-        return 'text-green-600 bg-green-50'
+        return 'text-blue-600 bg-blue-50'
       case 'runtime_error':
         return 'text-red-600 bg-red-50'
       case 'timeout':
@@ -160,10 +162,20 @@ const ProblemDetail: React.FC = () => {
     }
   }
 
-  const getStatusText = (status: string) => {
-    switch (status) {
+  const getResultText = (executionResult: CodeExecutionResult) => {
+    if (executionResult.is_real_judge) {
+      return executionResult.verdict === 'AC'
+        ? '答案正确 (Accepted)'
+        : `答案未通过 (${executionResult.verdict})`
+    }
+    if (executionResult.input_source === 'sample' && executionResult.verdict !== 'N/A') {
+      return executionResult.verdict === 'AC'
+        ? '公开样例通过'
+        : `公开样例未通过 (${executionResult.verdict})`
+    }
+    switch (executionResult.status) {
       case 'success':
-        return '运行成功'
+        return '运行完成（未判题）'
       case 'runtime_error':
         return '运行错误 (Runtime Error)'
       case 'timeout':
@@ -177,8 +189,12 @@ const ProblemDetail: React.FC = () => {
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    return status === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />
+  const getResultIcon = (executionResult: CodeExecutionResult) => {
+    if (executionResult.verdict === 'AC') return <CheckCircle size={18} />
+    if (executionResult.verdict !== 'N/A' || executionResult.status !== 'success') {
+      return <XCircle size={18} />
+    }
+    return <Cpu size={18} />
   }
 
   return (
@@ -216,7 +232,7 @@ const ProblemDetail: React.FC = () => {
                 <div className="flex-1 text-sm">
                   <p className="font-medium text-blue-900">Codeforces 外链题</p>
                   <p className="text-blue-700 mt-1">
-                    本地会按需同步公开题面和样例；你也可以在右侧填写自定义输入进行调试。
+                    本地只能校验公开样例；你也可以在右侧填写自定义输入进行调试。
                     {cfBound
                       ? '你在 CF 的提交会每 5 分钟自动同步，AC 后自动计入掌握度。'
                       : '绑定 CF 账号后，你在 CF 的提交会自动同步进来。'}
@@ -253,8 +269,8 @@ const ProblemDetail: React.FC = () => {
             {problem.sample_input && (
               <>
                 <h3 className="text-md font-semibold mt-6">样例输入：</h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <pre className="text-sm text-gray-800 whitespace-pre-wrap">
+                <div className="not-prose bg-gray-50 p-4 rounded-lg">
+                  <pre className="m-0 overflow-x-auto whitespace-pre-wrap font-mono text-sm text-gray-800">
                     {problem.sample_input}
                   </pre>
                 </div>
@@ -264,8 +280,8 @@ const ProblemDetail: React.FC = () => {
             {problem.sample_output && (
               <>
                 <h3 className="text-md font-semibold mt-6">样例输出：</h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <pre className="text-sm text-gray-800 whitespace-pre-wrap">
+                <div className="not-prose bg-gray-50 p-4 rounded-lg">
+                  <pre className="m-0 overflow-x-auto whitespace-pre-wrap font-mono text-sm text-gray-800">
                     {problem.sample_output}
                   </pre>
                 </div>
@@ -328,7 +344,7 @@ const ProblemDetail: React.FC = () => {
                 className="flex items-center gap-2 px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
               >
                 <Send size={16} />
-                {isJudging ? '运行中...' : '运行代码'}
+                {isJudging ? '运行中...' : useCustomInput ? '运行自定义输入' : '运行并校验样例'}
               </button>
             </div>
           </div>
@@ -383,21 +399,21 @@ const ProblemDetail: React.FC = () => {
           {result && (
             <div className="border-t border-gray-700 bg-gray-800 p-4 max-h-64 overflow-y-auto">
               <div
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${getStatusColor(
-                  result.status
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${getResultColor(
+                  result
                 )} mb-4`}
               >
-                {getStatusIcon(result.status)}
-                <span className="font-medium">{getStatusText(result.status)}</span>
-                {result.is_real_judge && (
+                {getResultIcon(result)}
+                <span className="font-medium">{getResultText(result)}</span>
+                {result.verdict !== 'N/A' && (
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-bold ${
                       result.verdict === 'AC' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'
                     }`}
                   >
-                    {result.verdict === 'AC'
-                      ? `AC · ${result.passed_cases}/${result.total_cases}`
-                      : `${result.verdict} · ${result.passed_cases}/${result.total_cases}`}
+                    {result.is_real_judge
+                      ? `${result.verdict} · ${result.passed_cases}/${result.total_cases}`
+                      : `样例 ${result.verdict}`}
                   </span>
                 )}
               </div>

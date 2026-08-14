@@ -8,8 +8,28 @@ on:
 
 jobs:
   backend-check:
-    name: Backend (Ruff Lint + Format Check)
+    name: Backend (Ruff + Pytest)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: algo_tutor
+          POSTGRES_PASSWORD: algo_tutor_secret
+          POSTGRES_DB: algo_tutor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U algo_tutor -d algo_tutor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://algo_tutor:algo_tutor_secret@localhost:5432/algo_tutor_test
+      TEST_DATABASE_URL: postgresql+asyncpg://algo_tutor:algo_tutor_secret@localhost:5432/algo_tutor_test
+      JWT_SECRET: ci-only-secret
+      REDIS_URL: redis://localhost:6379/0
+      OPENAI_API_KEY: sk-ci-placeholder
     defaults:
       run:
         working-directory: backend
@@ -20,20 +40,26 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "pip"
+          python-version: '3.12'
+          cache: 'pip'
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff==0.8.4
+          pip install -r requirements.txt
 
       - name: Run Ruff lint
         run: ruff check .
 
       - name: Check Ruff format
         run: ruff format --check .
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Run backend tests
+        run: python -m pytest -q
 
   backend-docker-build:
     name: Backend Docker Build
@@ -59,8 +85,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
@@ -77,6 +103,12 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run golden-demo E2E
+        run: npm run test:e2e
 
   frontend-docker-build:
     name: Frontend Docker Build

@@ -48,6 +48,14 @@ docker compose up -d --build
 - 后端 API 文档: http://localhost:8000/docs
 - 后端 ReDoc: http://localhost:8000/redoc
 
+### 评审黄金演示
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/reset-demo.ps1
+```
+
+随后在登录页点击“一键进入黄金演示账号”。完整的三分钟演示顺序、账号信息与讲解口径见 [DEMO.md](DEMO.md)。
+
 ### 本地开发（可选）
 
 #### 后端
@@ -83,7 +91,7 @@ algo-tutor/
 │   │   ├── components/      # 通用组件
 │   │   ├── pages/           # 页面组件
 │   │   ├── stores/          # Zustand 状态管理
-│   │   └── services/        # API 请求
+│   │   └── utils/           # API 请求
 │   └── package.json
 ├── backend/                  # FastAPI 后端
 │   ├── app/

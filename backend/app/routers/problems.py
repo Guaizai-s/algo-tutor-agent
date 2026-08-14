@@ -289,7 +289,7 @@ async def execute_problem_code(
             }
         )
 
-    # 无测试用例（CF 外链题）：仅运行自定义输入/公开样例，不判题、不回传。
+    # 无隐藏测试用例（CF 外链题）：自定义输入仅运行；公开样例至少比对样例输出。
     if req.stdin is not None:
         stdin = req.stdin
         input_source = "custom"
@@ -301,6 +301,43 @@ async def execute_problem_code(
             status_code=422,
             detail="题目样例尚未同步，请填写自定义输入后再运行。",
         )
+
+    sample_output = getattr(p, "sample_output", None)
+    if input_source == "sample" and sample_output is not None:
+        sample_result = await judge_service.judge(
+            source_code=req.code,
+            language=req.language,
+            test_input=stdin,
+            expected_output=sample_output,
+            timeout_ms=timeout_ms,
+            memory_mb=memory_limit_mb,
+        )
+        verdict = sample_result.verdict.value
+        if verdict == "AC":
+            message = "公开样例通过；这不代表已通过 Codeforces 隐藏测试，请前往 Codeforces 正式提交。"
+        elif verdict == "WA":
+            message = f"公开样例未通过：{sample_result.message}"
+        elif verdict == "ERR":
+            message = f"样例判题服务暂时不可用：{sample_result.message}"
+        else:
+            message = sample_result.message or f"公开样例执行失败（{verdict}）。"
+        return CodeExecutionResponse.model_validate(
+            {
+                "status": _normalize_exec_status(verdict),
+                "stdout": sample_result.stdout,
+                "stderr": sample_result.stderr,
+                "exit_code": 0 if verdict in {"AC", "WA"} else 1,
+                "time_used_ms": sample_result.time_ms,
+                "truncated": False,
+                "input_source": "sample",
+                "message": message,
+                "is_real_judge": False,
+                "verdict": "N/A" if verdict == "ERR" else verdict,
+                "total_cases": 1,
+                "passed_cases": 1 if verdict == "AC" else 0,
+            }
+        )
+
     result = await code_execution.execute(
         {
             "language": req.language,
@@ -310,11 +347,7 @@ async def execute_problem_code(
             "memory_limit_mb": memory_limit_mb,
         }
     )
-    message = (
-        "已使用题目样例输入运行；运行成功不等于通过全部测试。"
-        if input_source == "sample"
-        else "已使用自定义输入运行；运行成功不等于通过全部测试。"
-    )
+    message = "已使用自定义输入运行；本次仅执行代码，没有可供比对的标准答案。"
     return CodeExecutionResponse.model_validate(
         {
             **result,

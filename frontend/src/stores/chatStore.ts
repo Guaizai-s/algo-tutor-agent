@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { db } from '../db/db'
-import type { AgentReference, AgentToolCall, ChatMessage, Conversation } from '../types'
+import type {
+  AgentReference,
+  AgentToolCall,
+  AgentTraceStep,
+  ChatMessage,
+  Conversation,
+} from '../types'
 
 /** 未登录用户使用的占位 user_id。 */
 export const LOCAL_USER_ID = 'local'
@@ -27,6 +33,7 @@ interface ChatState {
     content: string
     references?: AgentReference[]
     toolCalls?: AgentToolCall[]
+    trace?: AgentTraceStep[]
   }) => Promise<ChatMessage>
   /** 删除指定消息（用于失败回滚）。 */
   removeMessage: (messageId: string) => Promise<void>
@@ -121,7 +128,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return conv.id
   },
 
-  addMessage: async ({ userId, conversationId, role, content, references, toolCalls }) => {
+  addMessage: async ({ userId, conversationId, role, content, references, toolCalls, trace }) => {
     const msg: ChatMessage = {
       id: genId(),
       conversation_id: conversationId,
@@ -130,6 +137,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content,
       references: references?.length ? references : undefined,
       tool_calls: toolCalls?.length ? toolCalls : undefined,
+      trace: trace?.length ? trace : undefined,
       created_at: nowIso(),
     }
     await db.messages.add(msg)

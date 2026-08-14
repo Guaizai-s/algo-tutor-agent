@@ -25,9 +25,7 @@ async def build_tutor_learning_context(db: AsyncSession, user_id: UUID) -> str |
     if user is None:
         return None
 
-    profile = (
-        await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))
-    ).scalar_one_or_none()
+    profile = (await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))).scalar_one_or_none()
     weak_rows = (
         await db.execute(
             select(
@@ -74,11 +72,7 @@ async def build_tutor_learning_context(db: AsyncSession, user_id: UUID) -> str |
         )
     ).all()
 
-    target = (
-        f"{profile.target_rating_min}-{profile.target_rating_max}"
-        if profile is not None
-        else "尚未定标"
-    )
+    target = f"{profile.target_rating_min}-{profile.target_rating_max}" if profile is not None else "尚未定标"
     lines = [
         f"学习者：{user.username}",
         f"Codeforces：{user.cf_handle or '未绑定'}",
@@ -87,25 +81,14 @@ async def build_tutor_learning_context(db: AsyncSession, user_id: UUID) -> str |
     if weak_rows:
         lines.append(
             "薄弱点："
-            + "；".join(
-                f"{row.name}(掌握度 {row.mastery:.0%}, 连续错误 {row.consecutive_wa})"
-                for row in weak_rows
-            )
+            + "；".join(f"{row.name}(掌握度 {row.mastery:.0%}, 连续错误 {row.consecutive_wa})" for row in weak_rows)
         )
     else:
         lines.append("薄弱点：暂无已确认薄弱点")
     if path_rows:
-        lines.append(
-            "当前路径："
-            + " → ".join(
-                f"{row.name}[{row.kind.value}/{row.status.value}]" for row in path_rows
-            )
-        )
+        lines.append("当前路径：" + " → ".join(f"{row.name}[{row.kind.value}/{row.status.value}]" for row in path_rows))
     if wrong_rows:
         lines.append(
-            "待订正错题："
-            + "；".join(
-                f"{row.title}({row.verdict}, 已重试 {row.retry_count} 次)" for row in wrong_rows
-            )
+            "待订正错题：" + "；".join(f"{row.title}({row.verdict}, 已重试 {row.retry_count} 次)" for row in wrong_rows)
         )
     return "\n".join(lines)

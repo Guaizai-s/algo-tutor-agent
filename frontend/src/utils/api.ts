@@ -2,6 +2,7 @@ import axios from 'axios'
 import type {
   AgentChatRequest,
   AgentChatResponse,
+  AgentStreamEvent,
   BindCFRequest,
   BindCFResponse,
   CodeExecutionResult,
@@ -76,16 +77,65 @@ export const problemsApi = {
     sort?: 'newest' | 'oldest' | 'rating_asc' | 'rating_desc' | 'acceptance'
   }) => api.get('/problems/', { params }),
   getById: (id: string) => api.get(`/problems/${id}`),
-  execute: (
-    id: string,
-    code: string,
-    language: 'python' | 'cpp' | 'java',
-    stdin?: string
-  ) => api.post<CodeExecutionResult>(`/problems/${id}/execute`, { code, language, stdin }),
+  execute: (id: string, code: string, language: 'python' | 'cpp' | 'java', stdin?: string) =>
+    api.post<CodeExecutionResult>(`/problems/${id}/execute`, { code, language, stdin }),
 }
 
 export const agentApi = {
   chat: (req: AgentChatRequest) => api.post<AgentChatResponse>('/agent/chat', req),
+  streamChat: async (
+    req: AgentChatRequest,
+    onEvent: (event: AgentStreamEvent) => void,
+    signal?: AbortSignal
+  ) => {
+    const token = localStorage.getItem('token')
+    const baseUrl = api.defaults.baseURL ?? 'http://localhost:8000/api/v1'
+    const response = await fetch(`${baseUrl}/agent/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(req),
+      signal,
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
+      const payload = (await response.json().catch(() => null)) as { detail?: string } | null
+      throw new Error(payload?.detail ?? `请求失败（${response.status}）`)
+    }
+    if (!response.body) throw new Error('浏览器不支持流式响应')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      buffer += decoder.decode(value, { stream: !done })
+      const blocks = buffer.split(/\r?\n\r?\n/)
+      buffer = blocks.pop() ?? ''
+
+      for (const block of blocks) {
+        const data = block
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart())
+          .join('\n')
+        if (!data) continue
+        const event = JSON.parse(data) as AgentStreamEvent
+        if (event.type === 'error') throw new Error(event.message)
+        onEvent(event)
+      }
+      if (done) break
+    }
+  },
 }
 
 export const progressApi = {

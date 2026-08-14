@@ -63,7 +63,7 @@ class _ContextParser(HTMLParser):
 def _first_limit(value: Any) -> int | None:
     if isinstance(value, list) and value:
         value = value[0]
-    if isinstance(value, (int, float)) and value > 0:
+    if isinstance(value, int | float) and value > 0:
         return int(value)
     return None
 

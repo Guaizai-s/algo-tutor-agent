@@ -6,6 +6,8 @@ node_modules/
 # Build
 frontend/dist/
 frontend/build/
+frontend/test-results/
+frontend/playwright-report/
 # TypeScript 增量构建缓存（每次 build 会变，不应入库）
 *.tsbuildinfo
 

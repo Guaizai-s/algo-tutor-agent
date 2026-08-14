@@ -93,6 +93,7 @@ export interface ChatMessage {
   content: string
   references?: AgentReference[]
   tool_calls?: AgentToolCall[]
+  trace?: AgentTraceStep[]
   created_at: string
 }
 
@@ -257,7 +258,7 @@ export interface CodeExecutionResult {
   truncated: boolean
   input_source: 'sample' | 'custom'
   message: string
-  /** 是否进行了真实判题（平台自建题有测试用例时为 true） */
+  /** 是否使用了平台隐藏测试用例；公开样例比对仍为 false */
   is_real_judge: boolean
   verdict: Verdict
   total_cases: number
@@ -287,8 +288,17 @@ export interface AgentReference {
 }
 
 export interface AgentToolCall {
-  name: 'execute_code' | 'search_problems' | 'search_knowledge'
+  name: string
   status: 'success' | 'error'
+}
+
+export interface AgentTraceStep {
+  id: string
+  kind: 'understanding' | 'planning' | 'tool' | 'answer'
+  title: string
+  detail?: string | null
+  status: 'running' | 'success' | 'error'
+  tool_name?: string | null
 }
 
 export interface AgentChatRequest {
@@ -305,7 +315,19 @@ export interface AgentChatResponse {
   message: string
   references: AgentReference[]
   tool_calls: AgentToolCall[]
+  trace: AgentTraceStep[]
 }
+
+export type AgentStreamEvent =
+  | { type: 'trace'; step: AgentTraceStep }
+  | { type: 'answer_delta'; delta: string }
+  | {
+      type: 'done'
+      references: AgentReference[]
+      tool_calls: AgentToolCall[]
+      trace: AgentTraceStep[]
+    }
+  | { type: 'error'; message: string }
 
 // ===== Task 10: Learning path & daily task =====
 

@@ -117,6 +117,15 @@ async def migrate_demo_references(session, demo_id, official_id) -> None:
     params = {"demo_id": demo_id, "official_id": official_id}
 
     statements = (
+        # Replacing either side of an edge can collapse two demo nodes into
+        # the same official node. Remove those edges before the UPDATEs so the
+        # database-level not-self constraint is never violated.
+        """
+        DELETE FROM knowledge_prerequisites
+        WHERE (knowledge_id = :demo_id AND prerequisite_id = :demo_id)
+           OR (knowledge_id = :demo_id AND prerequisite_id = :official_id)
+           OR (knowledge_id = :official_id AND prerequisite_id = :demo_id)
+        """,
         """
         UPDATE user_knowledge_states target
             SET mastery = GREATEST(target.mastery, source.mastery),
@@ -178,6 +187,14 @@ async def migrate_demo_references(session, demo_id, official_id) -> None:
     )
     for statement in statements:
         await session.execute(text(statement), params)
+
+
+async def remove_self_prerequisites(session) -> int:
+    """Remove invalid historical self-edges left by older merge scripts."""
+    result = await session.execute(
+        delete(KnowledgePrerequisite).where(KnowledgePrerequisite.knowledge_id == KnowledgePrerequisite.prerequisite_id)
+    )
+    return result.rowcount or 0
 
 
 async def main() -> None:
@@ -260,6 +277,8 @@ async def main() -> None:
 
         # 4) 删除 demo 节点（先子表后父表）
         demo_ids = [v for v in demo_id_by_slug.values() if v is not None]
+        removed_self_prerequisites = await remove_self_prerequisites(session)
+        print(f"Removed historical self-prerequisites: {removed_self_prerequisites}")
         if not demo_ids:
             print("demo 节点已全部删除，跳过清理")
             await session.commit()

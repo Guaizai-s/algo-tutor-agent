@@ -48,7 +48,19 @@ class AgentToolCallSummary(BaseModel):
     status: Literal["success", "error"]
 
 
+class AgentTraceStep(BaseModel):
+    """A user-facing, non-sensitive summary of one Agent workflow step."""
+
+    id: str
+    kind: Literal["understanding", "planning", "tool", "answer"]
+    title: str
+    detail: str | None = None
+    status: Literal["running", "success", "error"]
+    tool_name: str | None = None
+
+
 class AgentChatResponse(BaseModel):
     message: str
     references: list[AgentReference] = Field(default_factory=list)
     tool_calls: list[AgentToolCallSummary] = Field(default_factory=list)
+    trace: list[AgentTraceStep] = Field(default_factory=list)

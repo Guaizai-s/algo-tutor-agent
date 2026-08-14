@@ -30,13 +30,13 @@ from app.models.learning import UserProblemAC
 from app.models.problem import Problem, ProblemKnowledgePoint, ProblemSource, ProblemStatus
 from app.models.wrongbook import WrongBookEntry
 from app.services.codeforces.client import CodeforcesClient, get_codeforces_client
+from app.services.codeforces.verdicts import WRONGBOOK_VERDICTS
 from app.services.progress import recompute_mastery
 
 logger = logging.getLogger(__name__)
 
 # 单次 upsert 批量大小，避免单条 SQL 过大
 UPSERT_BATCH_SIZE = 500
-WRONG_VERDICTS = {"WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", "RUNTIME_ERROR"}
 
 
 async def sync_problemset(
@@ -114,9 +114,7 @@ def _problem_to_row(p: dict) -> dict:
 async def sync_cf_tag_knowledge_mappings(db: AsyncSession) -> int:
     """按 KnowledgePoint.cf_tag 为 CF 题目补齐知识点关联，幂等执行。"""
     tag_rows = (
-        await db.execute(
-            select(KnowledgePoint.id, KnowledgePoint.cf_tag).where(KnowledgePoint.cf_tag.is_not(None))
-        )
+        await db.execute(select(KnowledgePoint.id, KnowledgePoint.cf_tag).where(KnowledgePoint.cf_tag.is_not(None)))
     ).all()
     tag_to_knowledge: dict[str, set[UUID]] = defaultdict(set)
     for row in tag_rows:
@@ -147,9 +145,7 @@ async def sync_cf_tag_knowledge_mappings(db: AsyncSession) -> int:
     rows = [{"problem_id": problem_id, "knowledge_id": knowledge_id} for problem_id, knowledge_id in pairs]
     for offset in range(0, len(rows), UPSERT_BATCH_SIZE):
         result = await db.execute(
-            pg_insert(ProblemKnowledgePoint)
-            .values(rows[offset : offset + UPSERT_BATCH_SIZE])
-            .on_conflict_do_nothing()
+            pg_insert(ProblemKnowledgePoint).values(rows[offset : offset + UPSERT_BATCH_SIZE]).on_conflict_do_nothing()
         )
         inserted += max(result.rowcount or 0, 0)
     await db.flush()
@@ -332,7 +328,7 @@ async def sync_user_status(
             if problem_id is not None:
                 affected_problem_ids.add(problem_id)
 
-            if verdict in WRONG_VERDICTS:
+            if verdict in WRONGBOOK_VERDICTS:
                 await db.execute(
                     pg_insert(WrongBookEntry)
                     .values(

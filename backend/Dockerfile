@@ -19,6 +19,13 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
 
 COPY . .
 
+# Celery services run as this unprivileged account. The API container keeps
+# its explicit compose default because it needs controlled Docker socket access
+# for the local execution sandbox.
+RUN groupadd --gid 10001 appgroup \
+    && useradd --uid 10001 --gid appgroup --create-home appuser \
+    && chown -R appuser:appgroup /app
+
 ENV PYTHONPATH=/app
 
 EXPOSE 8000

@@ -88,7 +88,9 @@ async def bind_codeforces(
     try:
         return await bind_cf_handle(db, current_user, payload.handle, client)
     except CodeforcesHandleInvalidError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Codeforces user not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Codeforces user not found"
+        ) from exc
     except CodeforcesHandleAlreadyBoundError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Codeforces account already bound") from exc
     except CodeforcesRebindRequiredError as exc:
@@ -97,4 +99,6 @@ async def bind_codeforces(
             detail=f"Current account is already bound to {exc.args[0]}; explicit rebinding is required",
         ) from exc
     except CodeforcesUnavailableError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Codeforces API unavailable") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Codeforces API unavailable"
+        ) from exc

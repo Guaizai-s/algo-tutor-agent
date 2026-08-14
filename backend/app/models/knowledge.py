@@ -2,8 +2,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, SmallInteger, String, Text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Integer, SmallInteger, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,6 +67,12 @@ class KnowledgePoint(UUIDMixin, TimestampMixin, Base):
 
 class KnowledgePrerequisite(UUIDMixin, Base):
     __tablename__ = "knowledge_prerequisites"
+    __table_args__ = (
+        CheckConstraint(
+            "knowledge_id <> prerequisite_id",
+            name="ck_knowledge_prerequisites_not_self",
+        ),
+    )
 
     knowledge_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

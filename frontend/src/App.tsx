@@ -35,6 +35,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="assess" element={<Assess />} />
           <Route path="today" element={<TodayTask />} />
+          <Route path="today-task" element={<Navigate to="/today" replace />} />
           <Route path="profile" element={<Profile />} />
           <Route path="knowledge" element={<KnowledgeTree />} />
           <Route path="knowledge/graph" element={<Navigate to="/knowledge" replace />} />

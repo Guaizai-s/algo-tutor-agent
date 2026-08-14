@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
+import asyncio
+
 from sqlalchemy import text
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from app.core.database import async_session_maker
 
 
@@ -46,12 +48,12 @@ async def main() -> None:
             return
 
         canonical = choose_canonical_revision(script, revisions)
-        await session.execute(text("DELETE FROM alembic_version WHERE version_num <> :revision"), {"revision": canonical})
+        await session.execute(
+            text("DELETE FROM alembic_version WHERE version_num <> :revision"), {"revision": canonical}
+        )
         await session.commit()
         print(f"[alembic-repair] kept {canonical}; removed {len(revisions) - 1} ancestor row(s).")
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

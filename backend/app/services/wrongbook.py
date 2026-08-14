@@ -1,7 +1,7 @@
 """错题本 service (Task 12)。
 
 核心职责：
-- 查询用户错题列表（基于 Submission 表，verdict 为 WA/TLE/RE）
+- 查询用户错题列表（基于 Submission 表的最终失败 verdict）
 - 错题重试计数（使用 WrongBookEntry 独立模型，不跨区修改 Submission）
 - 同类题推荐（基于知识点关联 + cf_rating 升序）
 
@@ -28,14 +28,12 @@ from app.schemas.wrongbook import (
     WrongBookListResponse,
     WrongBookRecommendation,
 )
-
-# 错题 verdict 类型
-WRONG_VERDICTS = {"WRONG_ANSWER", "TIME_LIMIT_EXCEEDED", "RUNTIME_ERROR"}
+from app.services.codeforces.verdicts import WRONGBOOK_VERDICTS
 
 
 async def list_wrongbook(db: AsyncSession, user_id: UUID, params: WrongBookListParams) -> WrongBookListResponse:
     """查询用户错题本列表。"""
-    filters = [Submission.user_id == user_id, Submission.verdict.in_(WRONG_VERDICTS)]
+    filters = [Submission.user_id == user_id, Submission.verdict.in_(WRONGBOOK_VERDICTS)]
     if params.knowledge_id:
         subq = select(ProblemKnowledgePoint.problem_id).where(ProblemKnowledgePoint.knowledge_id == params.knowledge_id)
         filters.append(Submission.problem_id.in_(subq))

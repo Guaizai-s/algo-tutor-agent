@@ -4,23 +4,35 @@ import { useAuthStore } from '../stores/authStore'
 import { BookOpen, Eye, EyeOff } from 'lucide-react'
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('admin@algo-tutor.local')
-  const [password, setPassword] = useState('admin123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const { login, isLoading } = useAuthStore()
   const navigate = useNavigate()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const loginWithCredentials = async (loginEmail: string, loginPassword: string) => {
     setError('')
     try {
-      await login(email, password)
+      await login(loginEmail, loginPassword)
       navigate('/')
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(detail || '登录失败，请检查邮箱和密码')
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await loginWithCredentials(email, password)
+  }
+
+  const handleDemoLogin = async () => {
+    const demoEmail = 'demo@algo-tutor.local'
+    const demoPassword = 'Demo123456!'
+    setEmail(demoEmail)
+    setPassword(demoPassword)
+    await loginWithCredentials(demoEmail, demoPassword)
   }
 
   return (
@@ -70,6 +82,7 @@ const Login: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -85,6 +98,20 @@ const Login: React.FC = () => {
               {isLoading ? '登录中...' : '登录'}
             </button>
           </form>
+
+          <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
+            <span className="h-px flex-1 bg-gray-200" />
+            评审演示
+            <span className="h-px flex-1 bg-gray-200" />
+          </div>
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            disabled={isLoading}
+            className="w-full rounded-lg border border-indigo-200 bg-indigo-50 py-3 font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
+          >
+            一键进入黄金演示账号
+          </button>
 
           <p className="mt-6 text-center text-gray-600">
             还没有账号？{' '}

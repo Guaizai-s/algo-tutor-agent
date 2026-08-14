@@ -9,6 +9,7 @@ import pytest
 from app.models.problem import ProblemStatus
 from app.routers.problems import execute_problem_code
 from app.schemas.problem import CodeExecutionRequest
+from app.services.judge import JudgeResult, Verdict
 
 
 class _ScalarResult:
@@ -32,18 +33,13 @@ async def test_execute_problem_code_bypasses_agent_and_uses_sample(monkeypatch):
     problem = SimpleNamespace(
         status=ProblemStatus.PUBLISHED,
         sample_input="1 2\n",
+        sample_output="3\n",
         time_limit_ms=1000,
         memory_limit_kb=262144,
     )
-    sandbox_result = {
-        "status": "success",
-        "stdout": "3\n",
-        "stderr": "",
-        "exit_code": 0,
-        "time_used_ms": 25,
-        "truncated": False,
-    }
-    execute_mock = AsyncMock(return_value=sandbox_result)
+    judge_mock = AsyncMock(return_value=JudgeResult(verdict=Verdict.AC, stdout="3\n", time_ms=25))
+    execute_mock = AsyncMock()
+    monkeypatch.setattr("app.routers.problems.judge_service.judge", judge_mock)
     monkeypatch.setattr("app.routers.problems.code_execution.execute", execute_mock)
 
     response = await execute_problem_code(
@@ -52,18 +48,54 @@ async def test_execute_problem_code_bypasses_agent_and_uses_sample(monkeypatch):
         _FakeSession(problem),
     )
 
-    execute_mock.assert_awaited_once_with(
-        {
-            "language": "python",
-            "code": "print(sum(map(int, input().split())))",
-            "stdin": "1 2\n",
-            "timeout_ms": 1000,
-            "memory_limit_mb": 256,
-        }
+    judge_mock.assert_awaited_once_with(
+        source_code="print(sum(map(int, input().split())))",
+        language="python",
+        test_input="1 2\n",
+        expected_output="3\n",
+        timeout_ms=1000,
+        memory_mb=256,
     )
+    execute_mock.assert_not_awaited()
     assert response.status == "success"
     assert response.stdout == "3\n"
     assert response.input_source == "sample"
+    assert response.verdict == "AC"
+    assert response.is_real_judge is False
+    assert response.passed_cases == 1
+    assert response.total_cases == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_problem_code_marks_wrong_sample_output_as_wa(monkeypatch):
+    problem = SimpleNamespace(
+        status=ProblemStatus.PUBLISHED,
+        sample_input="1 2\n",
+        sample_output="3\n",
+        time_limit_ms=1000,
+        memory_limit_kb=262144,
+    )
+    judge_mock = AsyncMock(
+        return_value=JudgeResult(
+            verdict=Verdict.WA,
+            stdout="hello\n",
+            time_ms=20,
+            message="答案错误: expected=3, got=hello",
+        )
+    )
+    monkeypatch.setattr("app.routers.problems.judge_service.judge", judge_mock)
+
+    response = await execute_problem_code(
+        uuid4(),
+        CodeExecutionRequest(language="python", code="print('hello')"),
+        _FakeSession(problem),
+    )
+
+    assert response.status == "success"
+    assert response.verdict == "WA"
+    assert response.passed_cases == 0
+    assert response.total_cases == 1
+    assert "样例未通过" in response.message
 
 
 @pytest.mark.asyncio
@@ -71,6 +103,7 @@ async def test_execute_problem_code_prefers_explicit_custom_input(monkeypatch):
     problem = SimpleNamespace(
         status=ProblemStatus.PUBLISHED,
         sample_input="sample\n",
+        sample_output="sample\n",
         time_limit_ms=1000,
         memory_limit_kb=262144,
     )

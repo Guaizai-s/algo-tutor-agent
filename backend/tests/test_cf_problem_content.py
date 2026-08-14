@@ -87,11 +87,17 @@ async def test_sync_problem_content_caches_result(monkeypatch):
         content_synced_at=None,
         content_sync_failed_at=None,
     )
-    fetch = AsyncMock(return_value=parse_luogu_problem_page(_page({
-        "content": {"description": "Statement", "formatI": "Input", "formatO": "Output"},
-        "samples": [["abc", "2"]],
-        "limits": {"time": [2000], "memory": [256000]},
-    })))
+    fetch = AsyncMock(
+        return_value=parse_luogu_problem_page(
+            _page(
+                {
+                    "content": {"description": "Statement", "formatI": "Input", "formatO": "Output"},
+                    "samples": [["abc", "2"]],
+                    "limits": {"time": [2000], "memory": [256000]},
+                }
+            )
+        )
+    )
     monkeypatch.setattr("app.services.codeforces.content.fetch_public_problem_content", fetch)
 
     assert await sync_problem_content(problem) is True

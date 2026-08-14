@@ -619,10 +619,7 @@ async def test_daily_task_uses_same_knowledge_rating_fallback(
     db_session.add_all(problems)
     await db_session.flush()
     db_session.add_all(
-        [
-            ProblemKnowledgePoint(problem_id=problem.id, knowledge_id=kp_chain["C"])
-            for problem in problems
-        ]
+        [ProblemKnowledgePoint(problem_id=problem.id, knowledge_id=kp_chain["C"]) for problem in problems]
     )
     await db_session.flush()
     await generate_learning_path(db_session, user_id, preview_count=5)

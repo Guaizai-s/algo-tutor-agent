@@ -27,12 +27,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.codeforces import CodeforcesAccount, RatingHistory, Submission
 from app.models.learning import UserProblemAC
 from app.models.problem import Problem, ProblemSource, ProblemStatus
+from app.models.wrongbook import WrongBookEntry
+from app.schemas.wrongbook import WrongBookListParams
 from app.services.codeforces.sync import (
     sync_all_users_status,
     sync_problemset,
     sync_user_rating,
     sync_user_status,
 )
+from app.services.wrongbook import list_wrongbook
 
 
 def _make_cf_problem(
@@ -305,6 +308,40 @@ async def test_user_status_sync_creates_submissions(db_session: AsyncSession):
     assert len(subs) == 2
     # 关联 problem_id
     assert all(s.problem_id is not None for s in subs)
+
+
+@pytest.mark.asyncio
+async def test_compilation_error_is_added_to_wrongbook(db_session: AsyncSession):
+    """Codeforces 编译错误既生成错题条目，也能被错题列表查询到。"""
+    user_id = uuid4()
+    account = CodeforcesAccount(id=uuid4(), user_id=user_id, handle="compile_error_user")
+    db_session.add(account)
+
+    await sync_problemset(
+        db_session,
+        FakeCodeforcesClient(problemset={"problems": [_make_cf_problem(900011, "A", "Compile Error", 800)]}),
+    )
+    ts = int(datetime.now(tz=UTC).timestamp())
+    result = await sync_user_status(
+        db_session,
+        account,
+        FakeCodeforcesClient(user_status=[_make_cf_submission(1101, 900011, "A", "COMPILATION_ERROR", ts=ts)]),
+    )
+
+    assert result["new_submissions"] == 1
+    entries = (
+        (await db_session.execute(select(WrongBookEntry).where(WrongBookEntry.user_id == user_id))).scalars().all()
+    )
+    assert len(entries) == 1
+    assert entries[0].verdict == "COMPILATION_ERROR"
+
+    wrongbook = await list_wrongbook(
+        db_session,
+        user_id,
+        WrongBookListParams(resolved=False, page_size=100),
+    )
+    assert wrongbook.total == 1
+    assert wrongbook.items[0].verdict == "COMPILATION_ERROR"
 
 
 @pytest.mark.asyncio
